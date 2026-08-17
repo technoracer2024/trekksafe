@@ -22,9 +22,28 @@ export default function CustomCursor() {
       my = e.clientY;
     };
 
-    const onMouseDown = () => {
+    const onMouseDown = (e: MouseEvent) => {
       isClick = true;
       outer.classList.add('click');
+
+      // Primary cyan click ripple wave
+      const r1 = document.createElement('div');
+      r1.className = 'click-ripple';
+      r1.style.left = `${e.clientX}px`;
+      r1.style.top = `${e.clientY}px`;
+      document.body.appendChild(r1);
+
+      // Secondary emerald outer pulse
+      const r2 = document.createElement('div');
+      r2.className = 'click-ripple-2';
+      r2.style.left = `${e.clientX}px`;
+      r2.style.top = `${e.clientY}px`;
+      document.body.appendChild(r2);
+
+      setTimeout(() => {
+        r1.remove();
+        r2.remove();
+      }, 700);
     };
 
     const onMouseUp = () => {

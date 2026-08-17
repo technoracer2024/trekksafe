@@ -102,6 +102,36 @@
   background: rgba(8, 145, 178, 0.25);
 }
 
+/* Click Ripple Wave Effect */
+.click-ripple {
+  position: fixed;
+  border-radius: 50%;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 14px var(--cyan);
+  pointer-events: none;
+  z-index: 999997;
+  transform: translate(-50%, -50%);
+  animation: rippleSpread 0.55s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+.click-ripple-2 {
+  position: fixed;
+  border-radius: 50%;
+  border: 1.5px solid #10B981;
+  box-shadow: 0 0 10px #10B981;
+  pointer-events: none;
+  z-index: 999996;
+  transform: translate(-50%, -50%);
+  animation: rippleSpread2 0.7s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+@keyframes rippleSpread {
+  0% { width: 4px; height: 4px; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { width: 68px; height: 68px; opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes rippleSpread2 {
+  0% { width: 2px; height: 2px; opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+  100% { width: 96px; height: 96px; opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
 /* Glowing Map Route */
 .glowing-route-line {
   filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.85));

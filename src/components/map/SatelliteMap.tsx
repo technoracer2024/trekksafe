@@ -37,10 +37,13 @@ export default function SatelliteMap() {
         const map = L.map(mapContainerRef.current, {
           center: [33.0145, 74.9460],
           zoom: 13,
-          zoomControl: true,
+          zoomControl: false,
           scrollWheelZoom: true,
           attributionControl: false
         });
+
+        // Position zoom controls cleanly at bottom-left
+        L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
         const activeTileUrl = isSatelliteMode
           ? GOOGLE_SAT_URL

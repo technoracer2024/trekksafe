@@ -303,60 +303,60 @@ export default function PilgrimMonitorTab() {
         
         {/* Device Info */}
         <div className="space-y-2 pb-3 border-b border-slate-200 dark:border-slate-800">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Device Status</div>
-          <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
-            <span>Trekker:</span>
-            <strong className="text-cyan-500 dark:text-cyan-400 font-sans">{selected?.name}</strong>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Device Status</div>
+          <div className="flex justify-between items-center text-slate-800 dark:text-slate-200">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Trekker:</span>
+            <strong className="text-cyan-600 dark:text-cyan-400 font-sans">{selected?.name}</strong>
           </div>
-          <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
-            <span>Device GPS:</span>
+          <div className="flex justify-between items-center text-slate-800 dark:text-slate-200">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Device GPS:</span>
             <span className="text-[11px]">
               {selected?.isUser && userLiveCoords.lat ? (
-                <span className="text-cyan-400">{userLiveCoords.lat.toFixed(4)}°, {userLiveCoords.lon?.toFixed(4)}° (±{userLiveCoords.accuracy}m)</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{userLiveCoords.lat.toFixed(4)}°, {userLiveCoords.lon?.toFixed(4)}° (±{userLiveCoords.accuracy}m)</span>
               ) : (
                 <span>{selected?.lat.toFixed(4)}°, {selected?.lon.toFixed(4)}°</span>
               )}
             </span>
           </div>
           <div className="space-y-1">
-            <div className="flex justify-between text-slate-700 dark:text-slate-300">
-              <span>Battery:</span>
-              <span>{selected?.battery || 88}%</span>
+            <div className="flex justify-between text-slate-800 dark:text-slate-200">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Battery:</span>
+              <span className="font-semibold">{selected?.battery || 88}%</span>
             </div>
             <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${selected?.battery || 88}%` }} />
             </div>
           </div>
-          <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
-            <span>Altitude:</span>
-            <span>{selected?.isUser && userLiveCoords.altitude ? userLiveCoords.altitude : '2,847 m'}</span>
+          <div className="flex justify-between items-center text-slate-800 dark:text-slate-200">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Altitude:</span>
+            <span className="font-semibold">{selected?.isUser && userLiveCoords.altitude ? userLiveCoords.altitude : '2,847 m'}</span>
           </div>
         </div>
 
         {/* Network Telemetry */}
         <div className="space-y-2 pb-3 border-b border-slate-200 dark:border-slate-800">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mesh Telemetry</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Mesh Telemetry</div>
           <div className="flex justify-between items-center">
-            <span className="text-slate-600 dark:text-slate-400">LoRa 915MHz:</span>
-            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ONLINE</span>
+            <span className="text-slate-600 dark:text-slate-400 font-medium">LoRa 915MHz:</span>
+            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">ONLINE</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-slate-600 dark:text-slate-400">Gateway:</span>
-            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">CONNECTED</span>
+            <span className="text-slate-600 dark:text-slate-400 font-medium">Gateway:</span>
+            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">CONNECTED</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-slate-600 dark:text-slate-400">GSM Fallback:</span>
-            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30">STANDBY</span>
+            <span className="text-slate-600 dark:text-slate-400 font-medium">GSM Fallback:</span>
+            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30">STANDBY</span>
           </div>
         </div>
 
         {/* Help Centers */}
         <div className="space-y-2 flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Help Centres & Responder Posts</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Help Centres &amp; Responder Posts</div>
           {HELP_CENTERS.map(hc => (
             <div
               key={hc.id}
-              className={`p-2 rounded-lg border transition-all ${
+              className={`p-2.5 rounded-lg border transition-all ${
                 hc.id === 'hc2' 
                   ? 'border-cyan-500/40 bg-cyan-500/10' 
                   : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
@@ -364,10 +364,10 @@ export default function PilgrimMonitorTab() {
             >
               <div className="flex justify-between items-center mb-0.5">
                 <span className="font-bold text-slate-800 dark:text-slate-200">{hc.name}</span>
-                <span className="text-[10px] font-bold text-cyan-400">{hc.distance}</span>
+                <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400">{hc.distance}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span>{hc.status}</span>
               </div>
             </div>

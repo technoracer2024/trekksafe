@@ -59,6 +59,7 @@ interface TrekSafeContextType {
   removeLostPerson: (id: number) => void;
   setHardwareConnected: (c: boolean) => void;
   applyHardwarePayload: (payload: any) => void;
+  updateUserLocation: (lat: number, lon: number, accuracy?: number) => void;
   showToast: (msg: string) => void;
 }
 
@@ -141,12 +142,19 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const isCalibratedRef = React.useRef<boolean>(false);
+
   // Geolocation for user's device
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, accuracy, altitude, speed } = pos.coords;
+        if (isCalibratedRef.current && accuracy > 30) {
+          // Keep calibrated position instead of inaccurate desktop IP triangulation
+          return;
+        }
+
         setUserLiveCoords({
           lat: latitude,
           lon: longitude,
@@ -382,6 +390,32 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     setHardwareConnected(true);
   }, [triggerEmergency]);
 
+  const [isCalibrated, setIsCalibrated] = useState<boolean>(false);
+
+  const updateUserLocation = useCallback((lat: number, lon: number, accuracy: number = 2) => {
+    setIsCalibrated(true);
+    isCalibratedRef.current = true;
+    setUserLiveCoords(prev => ({
+      ...prev,
+      lat,
+      lon,
+      accuracy: Math.round(accuracy)
+    }));
+    setTrekkers(prev => prev.map(t => {
+      if (t.isUser) {
+        return {
+          ...t,
+          lat,
+          lon,
+          accuracy: Math.round(accuracy),
+          gpsStatus: `Calibrated Pinpoint (±${Math.round(accuracy)}m)`
+        };
+      }
+      return t;
+    }));
+    showToast(`🎯 Device GPS Pinpoint: ${lat.toFixed(5)}°, ${lon.toFixed(5)}° (±${Math.round(accuracy)}m)`);
+  }, [showToast]);
+
   return (
     <TrekSafeContext.Provider value={{
       trekkers,
@@ -413,6 +447,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
       removeLostPerson,
       setHardwareConnected,
       applyHardwarePayload,
+      updateUserLocation,
       showToast
     }}>
       {children}

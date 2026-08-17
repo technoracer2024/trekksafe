@@ -8,7 +8,8 @@ import LostPersonTab from './LostPersonTab';
 import HardwareSyncModal from '../modals/HardwareSyncModal';
 import AddTrekkerModal from '../modals/AddTrekkerModal';
 import AddLostModal from '../modals/AddLostModal';
-import { Radio, AlertOctagon, UserPlus, Cpu, Activity, ShieldAlert, Users, Compass, Zap } from 'lucide-react';
+import LocationCalibrateModal from '../modals/LocationCalibrateModal';
+import { Radio, AlertOctagon, UserPlus, Cpu, Activity, ShieldAlert, Users, Compass, Zap, Crosshair } from 'lucide-react';
 
 export default function CommandCenter() {
   const {
@@ -24,6 +25,7 @@ export default function CommandCenter() {
   const [showHwModal, setShowHwModal] = useState(false);
   const [showAddTrekkerModal, setShowAddTrekkerModal] = useState(false);
   const [showAddLostModal, setShowAddLostModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
 
   const highRiskCount = trekkers.filter(t => t.riskLevel === 'high' || (t.medicalCondition && !t.medicalCondition.includes('Healthy'))).length;
 
@@ -138,11 +140,12 @@ export default function CommandCenter() {
           </button>
 
           <button
-            onClick={requestGps}
-            title="Lock and track device GPS position"
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-cyan-500 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
+            onClick={() => setShowLocationModal(true)}
+            title="Calibrate exact device GPS position / snap to landmark"
+            className="flex items-center gap-1 px-3 py-2 rounded-lg border border-cyan-500/40 hover:border-cyan-500 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold transition-all shadow-sm hover:-translate-y-0.5"
           >
-            📍
+            <Crosshair className="w-3.5 h-3.5 text-cyan-500" />
+            <span>🎯 Calibrate Pinpoint</span>
           </button>
         </div>
       </div>
@@ -156,6 +159,7 @@ export default function CommandCenter() {
       <HardwareSyncModal isOpen={showHwModal} onClose={() => setShowHwModal(false)} />
       <AddTrekkerModal isOpen={showAddTrekkerModal} onClose={() => setShowAddTrekkerModal(false)} />
       <AddLostModal isOpen={showAddLostModal} onClose={() => setShowAddLostModal(false)} />
+      <LocationCalibrateModal isOpen={showLocationModal} onClose={() => setShowLocationModal(false)} />
 
     </div>
   );

@@ -14,10 +14,13 @@ export default function SatelliteMap() {
     trekkers,
     selectedTrekker,
     selectTrekker,
+    updateUserLocation,
     isSatelliteMode,
     setIsSatelliteMode,
     isDark
   } = useTrekSafe();
+
+  const accuracyCircleRef = useRef<any>(null);
 
   const GOOGLE_SAT_URL = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
   const ESRI_SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -138,17 +141,52 @@ export default function SatelliteMap() {
           markersRef.current[t.id].setLatLng([t.lat, t.lon]);
           markersRef.current[t.id].setIcon(customIcon);
         } else {
-          const marker = L.marker([t.lat, t.lon], { icon: customIcon }).addTo(map);
+          const marker = L.marker([t.lat, t.lon], { 
+            icon: customIcon,
+            draggable: !!t.isUser
+          }).addTo(map);
+
           marker.on('click', () => selectTrekker(t.id));
+
+          if (t.isUser) {
+            marker.on('dragend', (e: any) => {
+              const pos = e.target.getLatLng();
+              updateUserLocation(pos.lat, pos.lng, 2);
+            });
+          }
+
           markersRef.current[t.id] = marker;
         }
+
+        // GPS Accuracy circle for user device
+        if (t.isUser) {
+          const accRadius = Math.max(8, Math.min(100, t.accuracy || 25));
+          if (accuracyCircleRef.current) {
+            accuracyCircleRef.current.setLatLng([t.lat, t.lon]);
+            accuracyCircleRef.current.setRadius(accRadius);
+          } else {
+            accuracyCircleRef.current = L.circle([t.lat, t.lon], {
+              radius: accRadius,
+              color: '#22D3EE',
+              fillColor: '#06B6D4',
+              fillOpacity: 0.12,
+              weight: 1.5,
+              dashArray: '4, 4'
+            }).addTo(map);
+          }
+        }
+
+        const userDragTip = t.isUser 
+          ? '<br><span style="font-size:10px;color:#22D3EE;font-weight:bold;">💡 Drag pin to calibrate exact location</span>' 
+          : '';
 
         markersRef.current[t.id].bindPopup(`
           <div style="font-size:12px;padding:2px;">
             <b style="color:#06B6D4;">${t.name}</b> (${t.age})<br>
             <span style="font-size:10px;color:#F59E0B;">🩺 ${t.medicalCondition}</span><br>
             ❤️ <b>${t.hr}</b> BPM &nbsp; 🫁 <b>${t.spo2}%</b> SpO₂ · 🏃 ${t.movement}<br>
-            <span style="font-size:10px;color:#94A3B8;">📍 ${t.lat.toFixed(4)}°, ${t.lon.toFixed(4)}°</span>
+            <span style="font-size:10px;color:#94A3B8;">📍 ${t.lat.toFixed(5)}°, ${t.lon.toFixed(5)}°</span>
+            ${userDragTip}
           </div>
         `);
       });
@@ -164,7 +202,7 @@ export default function SatelliteMap() {
     }
 
     updateMarkers();
-  }, [trekkers, selectTrekker]);
+  }, [trekkers, selectTrekker, updateUserLocation]);
 
   // Center on Selected Trekker
   useEffect(() => {

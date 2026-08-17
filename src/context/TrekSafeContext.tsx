@@ -87,7 +87,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState<'pilgrim' | 'medical' | 'lost'>('pilgrim');
   const [medFilter, setMedFilter] = useState<string>('all');
   const [isSatelliteMode, setIsSatelliteMode] = useState<boolean>(true);
-  const [isDark, setIsDark] = useState<boolean>(true);
+  const [isDark, setIsDark] = useState<boolean>(false);
   const [hardwareConnected, setHardwareConnected] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [userLiveCoords, setUserLiveCoords] = useState<{ lat: number | null; lon: number | null; accuracy: number | null; altitude: string | null }>({
@@ -129,15 +129,15 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Initialize theme from localStorage
+  // Initialize theme from localStorage (default to light)
   useEffect(() => {
     const saved = localStorage.getItem('ts-theme');
-    if (saved === 'light') {
-      setIsDark(false);
-      document.documentElement.classList.remove('dark');
-    } else {
+    if (saved === 'dark') {
       setIsDark(true);
       document.documentElement.classList.add('dark');
+    } else {
+      setIsDark(false);
+      document.documentElement.classList.remove('dark');
     }
   }, []);
 

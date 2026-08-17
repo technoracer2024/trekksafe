@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrekSafe — Smart Pilgrim Health Monitoring</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#060d08;
+  --bg2:#091210;
+  --bg3:#0d1a12;
+  --card:#0f1f16;
+  --card2:#132418;
+  --border:#1e3a28;
+  --border2:#2a5038;
+  --green:#22c55e;
+  --green2:#16a34a;
+  --green3:#4ade80;
+  --green4:#052e10;
+  --blue:#38bdf8;
+  --blue2:#7dd3fc;
+  --teal:#2dd4bf;
+  --amber:#fbbf24;
+  --red:#f87171;
+  --snow:#f0fff4;
+  --text:#e2ffe8;
+  --text2:#8aad94;
+  --text3:#3d6b4a;
+  --display:'Cormorant Garamond',serif;
+  --sans:'DM Sans',sans-serif;
+  --mono:'DM Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;}
+
+/* ========== INTRO PAGE ========== */
+#introPage{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.9s ease,transform 0.9s ease;}
+#introPage.exit{opacity:0;transform:scale(1.05);pointer-events:none;}
+.intro-beams{position:absolute;inset:0;overflow:hidden;}
+.beam{position:absolute;top:-10%;left:50%;width:3px;height:130%;background:linear-gradient(180deg,transparent,rgba(34,197,94,0.12),transparent);transform-origin:top center;animation:beamSway 6s ease-in-out infinite;}
+.beam:nth-child(1){transform:translateX(-300px) rotate(-25deg);animation-delay:0s;}
+.beam:nth-child(2){transform:translateX(-180px) rotate(-15deg);animation-delay:0.4s;}
+.beam:nth-child(3){transform:translateX(-60px) rotate(-5deg);animation-delay:0.8s;}
+.beam:nth-child(4){transform:translateX(60px) rotate(5deg);animation-delay:1.2s;}
+.beam:nth-child(5){transform:translateX(180px) rotate(15deg);animation-delay:0.6s;}
+.beam:nth-child(6){transform:translateX(300px) rotate(25deg);animation-delay:0.2s;}
+@keyframes beamSway{0%,100%{opacity:0.6;}50%{opacity:1;}}
+.intro-glow{position:absolute;top:30%;left:50%;transform:translate(-50%,-50%);width:500px;height:300px;background:radial-gradient(ellipse,rgba(34,197,94,0.15) 0%,transparent 70%);}
+.intro-icon{font-size:72px;margin-bottom:32px;position:relative;z-index:1;animation:float 3s ease-in-out infinite;}
+@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-12px);}}
+.intro-title{font-family:var(--display);font-size:clamp(80px,12vw,140px);font-weight:700;line-height:0.95;text-align:center;position:relative;z-index:1;color:var(--snow);}
+.intro-title .italic{font-style:italic;color:var(--green3);}
+.intro-tag{display:flex;align-items:center;gap:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);padding:10px 24px;border-radius:100px;margin:28px 0;position:relative;z-index:1;}
+.intro-tag-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:breathe 1.5s infinite;}
+@keyframes breathe{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.8);}}
+.intro-tag span{font-family:var(--mono);font-size:12px;color:var(--green3);letter-spacing:0.15em;text-transform:uppercase;}
+.intro-desc{color:var(--text2);font-size:17px;text-align:center;max-width:520px;line-height:1.7;margin-bottom:40px;position:relative;z-index:1;font-weight:300;}
+.intro-btn{background:transparent;border:1px solid rgba(34,197,94,0.4);color:var(--text);padding:16px 48px;border-radius:100px;font-family:var(--sans);font-size:14px;font-weight:600;letter-spacing:0.08em;cursor:pointer;display:flex;align-items:center;gap:12px;position:relative;z-index:1;transition:all 0.3s;backdrop-filter:blur(8px);}
+.intro-btn:hover{background:rgba(34,197,94,0.1);border-color:var(--green);color:var(--green3);transform:scale(1.04);}
+.intro-btn .arrow{font-size:18px;transition:transform 0.3s;}
+.intro-btn:hover .arrow{transform:translateX(6px);}
+
+/* ========== MAIN SITE ========== */
+#mainSite{opacity:0;transition:opacity 0.8s ease;}
+#mainSite.visible{opacity:1;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:rgba(6,13,8,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+.nav-logo{font-family:var(--display);font-size:24px;font-weight:700;color:var(--snow);}
+.nav-logo span{font-style:italic;color:var(--green3);}
+.nav-links{display:flex;gap:32px;}
+.nav-links a{color:var(--text2);text-decoration:none;font-size:13px;font-weight:500;transition:color 0.2s;}
+.nav-links a:hover{color:var(--green3);}
+.nav-live{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--green);border:1px solid rgba(34,197,94,0.3);padding:6px 14px;border-radius:100px;}
+.nlive-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:breathe 1.2s infinite;}
+
+/* SECTION COMMONS */
+section{padding:100px 48px;}
+.sec-eyebrow{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:14px;}
+.sec-title{font-family:var(--display);font-size:clamp(42px,5vw,68px);font-weight:700;line-height:1.05;color:var(--snow);margin-bottom:20px;}
+.sec-title em{font-style:italic;color:var(--green3);}
+.sec-title .bl{color:var(--blue2);}
+.sec-sub{color:var(--text2);font-size:16px;line-height:1.75;max-width:580px;font-weight:300;}
+
+/* ========== SECTION 1: HERO ========== */
+.hero{min-height:100vh;display:flex;align-items:center;padding:120px 48px 80px;position:relative;overflow:hidden;}
+.hero-bg-glow{position:absolute;top:20%;left:0;width:60%;height:60%;background:radial-gradient(ellipse at left,rgba(34,197,94,0.08) 0%,transparent 65%);pointer-events:none;}
+.hero-bg-glow2{position:absolute;bottom:0;right:0;width:40%;height:50%;background:radial-gradient(ellipse at right,rgba(56,189,248,0.05) 0%,transparent 65%);pointer-events:none;}
+.hero-mountain{position:absolute;bottom:0;left:0;right:0;opacity:0.05;}
+.hero-grid-lines{position:absolute;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:72px 72px;opacity:0.25;}
+.hero-inner{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;width:100%;}
+.hero-left{}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);padding:8px 18px;border-radius:100px;margin-bottom:28px;}
+.hero-eyebrow-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:breathe 1.5s infinite;}
+.hero-eyebrow span{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:0.12em;text-transform:uppercase;}
+.hero h1{font-family:var(--display);font-size:clamp(52px,6vw,82px);font-weight:700;line-height:1.0;color:var(--snow);margin-bottom:24px;}
+.hero h1 .green{color:var(--green3);}
+.hero h1 .italic{font-style:italic;}
+.hero-desc{color:var(--text2);font-size:17px;line-height:1.75;margin-bottom:40px;font-weight:300;max-width:480px;}
+.hero-stats{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);margin-bottom:40px;background:var(--card);}
+.hstat{padding:18px 20px;border-right:1px solid var(--border);}
+.hstat:nth-child(2){border:none;}
+.hstat:nth-child(3){border-right:1px solid var(--border);border-top:1px solid var(--border);}
+.hstat:nth-child(4){border-top:1px solid var(--border);}
+.hstat-n{font-family:var(--display);font-size:32px;font-weight:700;color:var(--green3);}
+.hstat-l{font-size:11px;color:var(--text3);letter-spacing:0.06em;margin-top:4px;}
+.hero-btns{display:flex;gap:12px;}
+.btn-g{background:var(--green);color:#000;border:none;padding:14px 32px;border-radius:6px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;transition:all 0.25s;box-shadow:0 8px 32px rgba(34,197,94,0.25);}
+.btn-g:hover{background:var(--green3);transform:translateY(-2px);}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2);padding:14px 32px;border-radius:6px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;transition:all 0.25s;}
+.btn-ghost:hover{border-color:var(--green);color:var(--green3);}
+.hero-right{display:flex;flex-direction:column;gap:14px;}
+.info-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:22px;transition:all 0.3s;position:relative;overflow:hidden;}
+.info-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green);}
+.info-card:hover{border-color:var(--border2);transform:translateX(4px);}
+.ic-title{font-weight:700;font-size:14px;color:var(--snow);margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.ic-desc{color:var(--text2);font-size:13px;line-height:1.6;}
+
+/* HOW IT WORKS STRIP */
+.hiw{background:var(--bg2);padding:80px 48px;}
+.hiw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);margin-top:56px;}
+.hiw-card{background:var(--bg2);padding:32px 24px;position:relative;overflow:hidden;transition:background 0.3s;}
+.hiw-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),var(--teal));transform:scaleX(0);transition:transform 0.3s;transform-origin:left;}
+.hiw-card:hover::after{transform:scaleX(1);}
+.hiw-card:hover{background:var(--bg3);}
+.hiw-n{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:0.15em;margin-bottom:18px;}
+.hiw-icon{font-size:36px;margin-bottom:14px;}
+.hiw-t{font-family:var(--display);font-size:20px;font-weight:700;color:var(--snow);margin-bottom:8px;}
+.hiw-d{color:var(--text2);font-size:13px;line-height:1.65;}
+
+/* ========== SECTION 2: SIMULATION DASHBOARD ========== */
+.dash-section{background:var(--bg);padding:100px 48px;}
+.dash-tab-bar{display:flex;gap:0;border:1px solid var(--border);background:var(--card);width:fit-content;border-radius:8px;overflow:hidden;margin-bottom:20px;}
+.dtab{padding:12px 28px;font-family:var(--mono);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.25s;color:var(--text2);border-right:1px solid var(--border);letter-spacing:0.05em;}
+.dtab:last-child{border:none;}
+.dtab.active{background:var(--green);color:#000;}
+.dtab:hover:not(.active){background:var(--card2);color:var(--green3);}
+.dash-controls{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.dc-btn{padding:10px 20px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;border-radius:6px;transition:all 0.2s;border:1px solid var(--border);letter-spacing:0.03em;}
+.dc-btn.primary{background:var(--green);color:#000;border:none;box-shadow:0 4px 16px rgba(34,197,94,0.2);}
+.dc-btn.primary:hover{background:var(--green3);transform:translateY(-1px);}
+.dc-btn.ghost{background:transparent;color:var(--text2);}
+.dc-btn.ghost:hover{border-color:var(--green);color:var(--green3);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* DASHBOARD SHELL */
+.dash-shell{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6);}
+.dash-topbar{background:var(--bg3);border-bottom:1px solid var(--border);padding:13px 22px;display:flex;align-items:center;justify-content:space-between;}
+.dtb-left{display:flex;align-items:center;gap:14px;}
+.dtb-dots{display:flex;gap:5px;}
+.dtb-dot{width:10px;height:10px;border-radius:50%;}
+.dtb-title{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:0.1em;}
+.dtb-right{display:flex;align-items:center;gap:14px;}
+.live-pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--green);background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);padding:4px 12px;border-radius:100px;}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:breathe 1s infinite;}
+.dtb-clock{font-family:var(--mono);font-size:11px;color:var(--text3);}
+.dash-body{display:grid;grid-template-columns:280px 1fr 260px;min-height:600px;}
+
+/* SIDEBAR */
+.db-sidebar{border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.sh-title{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;}
+.sh-badge{font-family:var(--mono);font-size:10px;color:var(--green);background:rgba(34,197,94,0.12);padding:2px 9px;border-radius:100px;}
+.sidebar-scroll{flex:1;overflow-y:auto;padding:10px;}
+.sidebar-scroll::-webkit-scrollbar{width:3px;}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.trek-card{padding:11px 13px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;position:relative;}
+.trek-card:hover{border-color:var(--border2);background:rgba(34,197,94,0.02);}
+.trek-card.sel{border-color:var(--green);background:rgba(34,197,94,0.05);}
+.trek-card.removing{animation:slideOut 0.4s ease forwards;}
+@keyframes slideOut{to{opacity:0;transform:translateX(-110%);max-height:0;padding:0;margin:0;}}
+.tc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.tc-name{font-weight:600;font-size:13px;color:var(--snow);}
+.tc-actions{display:flex;align-items:center;gap:6px;}
+.status-pip{width:8px;height:8px;border-radius:50%;}
+.pip-green{background:var(--green);}
+.pip-amber{background:var(--amber);animation:breathe 1.5s infinite;}
+.pip-red{background:var(--red);animation:breathe 0.7s infinite;}
+.tc-vitals{display:flex;gap:10px;}
+.tcv{font-family:var(--mono);font-size:11px;}
+.tcv .v{color:var(--text);}
+.tcv .l{color:var(--text3);font-size:9px;}
+.remove-btn{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);color:var(--green3);font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:var(--mono);transition:all 0.2s;white-space:nowrap;}
+.remove-btn:hover{background:rgba(34,197,94,0.25);}
+.completed-panel{padding:10px 16px;border-top:1px solid var(--border);max-height:130px;overflow-y:auto;}
+.cp-title{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:7px;}
+.cp-item{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(30,58,40,0.5);font-size:11px;color:var(--text3);}
+.cp-item:last-child{border:none;}
+.cp-check{color:var(--green);font-size:10px;}
+
+/* MAIN PANEL */
+.db-main{padding:14px;display:flex;flex-direction:column;gap:12px;}
+.map-area{flex:1;min-height:260px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;position:relative;overflow:hidden;}
+.map-grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(30,58,40,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(30,58,40,0.5) 1px,transparent 1px);background-size:32px 32px;}
+.map-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 60%,rgba(34,197,94,0.04) 0%,transparent 60%);}
+.map-lbl{position:absolute;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;}
+.hc-pin{position:absolute;}
+.hc-dot{width:13px;height:13px;background:var(--blue);border-radius:50%;border:2px solid var(--snow);box-shadow:0 0 10px rgba(56,189,248,0.5);}
+.hc-ring{position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--blue);opacity:0.35;animation:ping 2.2s infinite;}
+@keyframes ping{0%{transform:scale(1);opacity:0.35;}100%{transform:scale(2.8);opacity:0;}}
+.hc-lbl{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8px;color:var(--blue2);white-space:nowrap;}
+.tpin{position:absolute;cursor:pointer;transition:all 0.9s cubic-bezier(0.34,1.56,0.64,1);}
+.tpin-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--snow);transition:all 0.3s;}
+.tpin-lbl{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:8px;white-space:nowrap;background:var(--bg);padding:2px 5px;border-radius:3px;border:1px solid var(--border);}
+.map-legend{position:absolute;bottom:10px;right:10px;background:rgba(6,13,8,0.92);border:1px solid var(--border);border-radius:6px;padding:8px 12px;}
+.ml-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3);margin-bottom:3px;}
+.ml-item:last-child{margin:0;}
+.ml-dot{width:6px;height:6px;border-radius:50%;}
+.vitals-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.vcard{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:15px;transition:all 0.3s;}
+.vcard.warn{border-color:rgba(251,191,36,0.4);background:rgba(251,191,36,0.03);}
+.vcard.danger{border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.03);}
+.vc-lbl{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:7px;}
+.vc-val{font-family:var(--display);font-size:38px;font-weight:700;line-height:1;}
+.vc-val.ok{color:var(--green3);}
+.vc-val.warn{color:var(--amber);}
+.vc-val.danger{color:var(--red);}
+.vc-unit{font-family:var(--mono);font-size:10px;color:var(--text3);}
+.vc-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+.chart-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.chart-lbl{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;margin-bottom:10px;}
+
+/* RIGHT PANEL */
+.db-right{border-left:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
+.db-right::-webkit-scrollbar{width:3px;}
+.db-right::-webkit-scrollbar-thumb{background:var(--border2);}
+.rp-title{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--border);}
+.dev-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(30,58,40,0.4);}
+.dev-row:last-child{border:none;}
+.dr-l{font-size:12px;color:var(--text2);}
+.dr-v{font-family:var(--mono);font-size:11px;color:var(--text);}
+.batt-bar{width:100%;height:4px;background:var(--border);border-radius:2px;margin-top:5px;}
+.batt-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--green),var(--green2));transition:width 1s;}
+.sig-bars{display:flex;gap:2px;align-items:flex-end;}
+.sbar{width:4px;border-radius:1px;background:var(--border);}
+.sbar.on{background:var(--blue2);}
+.net-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px;}
+.net-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;}
+.net-lbl{font-size:11px;color:var(--text2);}
+.nbadge{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:100px;}
+.nbadge.on{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.3);}
+.nbadge.off{background:rgba(251,191,36,0.12);color:var(--amber);border:1px solid rgba(251,191,36,0.3);}
+.nbadge.gsm{background:rgba(56,189,248,0.12);color:var(--blue2);border:1px solid rgba(56,189,248,0.3);}
+.hc-list{display:flex;flex-direction:column;gap:6px;}
+.hc-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:all 0.3s;}
+.hc-item.nearest{border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.03);}
+.hc-item.dispatching{border-color:rgba(248,113,113,0.5);background:rgba(248,113,113,0.04);animation:pulseB 1s infinite;}
+@keyframes pulseB{50%{border-color:rgba(248,113,113,0.15);}}
+.hc-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+.hc-n{font-size:12px;font-weight:600;color:var(--snow);}
+.hc-badge{font-family:var(--mono);font-size:8px;color:var(--green);border:1px solid rgba(34,197,94,0.35);padding:1px 6px;border-radius:3px;}
+.hc-dbadge{font-family:var(--mono);font-size:8px;color:var(--red);border:1px solid rgba(248,113,113,0.35);padding:1px 6px;border-radius:3px;}
+.hc-dist{font-family:var(--mono);font-size:10px;color:var(--text3);}
+.hc-status{font-size:10px;color:var(--text3);}
+.ana-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.ana-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px;}
+.ana-n{font-family:var(--display);font-size:26px;font-weight:700;color:var(--snow);}
+.ana-l{font-size:10px;color:var(--text3);margin-top:2px;}
+
+/* ========== LOST PERSON TAB ========== */
+.lost-panel{display:grid;grid-template-columns:280px 1fr;min-height:540px;}
+.lost-sidebar{border-right:1px solid var(--border);padding:14px;}
+.lost-title{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.lost-mode-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:14px;}
+.lmt{flex:1;padding:8px;font-family:var(--mono);font-size:10px;text-align:center;cursor:pointer;transition:all 0.2s;color:var(--text2);}
+.lmt.on{background:var(--green);color:#000;}
+.lost-cards{display:flex;flex-direction:column;gap:8px;}
+.lcard{padding:12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.2s;}
+.lcard:hover{border-color:var(--border2);}
+.lcard.sel{border-color:var(--green);background:rgba(34,197,94,0.04);}
+.lcard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.lcard-name{font-weight:600;font-size:13px;color:var(--snow);}
+.lcard-type{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;}
+.lcard-type.child{background:rgba(56,189,248,0.15);color:var(--blue2);border:1px solid rgba(56,189,248,0.3);}
+.lcard-type.elder{background:rgba(251,191,36,0.15);color:var(--amber);border:1px solid rgba(251,191,36,0.3);}
+.lcard-info{font-size:12px;color:var(--text2);}
+.lost-main{padding:14px;display:flex;flex-direction:column;gap:12px;}
+.lost-map{flex:1;min-height:300px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;position:relative;overflow:hidden;}
+.lost-status-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.lsb-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.lsb-lbl{font-family:var(--mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;}
+.lsb-val{font-family:var(--display);font-size:28px;font-weight:700;color:var(--snow);}
+.lsb-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+
+/* ========== SECTION 3: LIVE DASHBOARD ========== */
+.live-section{background:var(--bg2);padding:100px 48px;}
+.live-shell{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:40px;}
+.live-topbar{background:var(--bg3);border-bottom:1px solid var(--border);padding:13px 22px;display:flex;align-items:center;justify-content:space-between;}
+.live-status-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px;}
+.ls-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:center;}
+.ls-card.connected{border-color:rgba(34,197,94,0.4);}
+.ls-icon{font-size:28px;margin-bottom:8px;}
+.ls-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;}
+.ls-val{font-family:var(--display);font-size:32px;font-weight:700;color:var(--snow);}
+.ls-status{font-size:11px;margin-top:6px;}
+.ls-status.conn{color:var(--green);}
+.ls-status.wait{color:var(--amber);}
+.live-placeholder{padding:40px;text-align:center;border-top:1px solid var(--border);}
+.lp-icon{font-size:64px;margin-bottom:16px;opacity:0.4;}
+.lp-title{font-family:var(--display);font-size:28px;font-weight:700;color:var(--snow);margin-bottom:8px;}
+.lp-desc{color:var(--text2);font-size:14px;line-height:1.7;max-width:480px;margin:0 auto 24px;}
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:20px;font-family:var(--mono);font-size:12px;line-height:2;max-width:540px;margin:0 auto;text-align:left;}
+.api-endpoint{margin-top:16px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:6px;padding:12px 16px;font-family:var(--mono);font-size:11px;color:var(--green3);}
+
+/* ========== SECTION 4: FAMILY APP ========== */
+.app-section{background:var(--bg);padding:100px 48px;}
+.app-layout{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;margin-top:60px;}
+.phones-wrap{display:flex;gap:24px;justify-content:center;align-items:flex-end;}
+.phone{border-radius:40px;padding:16px;box-shadow:0 40px 80px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.04);border:1px solid var(--border2);}
+.phone.main{width:200px;background:linear-gradient(145deg,#1a2e20,#0d1a12);}
+.phone.small{width:160px;background:linear-gradient(145deg,#131f16,#0a1410);opacity:0.7;transform:translateY(30px);}
+.phone-notch{width:50px;height:5px;background:var(--border2);border-radius:3px;margin:0 auto 14px;}
+.phone-screen{background:var(--bg);border-radius:24px;padding:14px;min-height:300px;}
+.ps-header{font-family:var(--mono);font-size:8px;color:var(--green);text-align:center;letter-spacing:0.18em;margin-bottom:10px;}
+.ps-name{font-family:var(--display);font-size:18px;font-weight:700;color:var(--snow);text-align:center;margin-bottom:4px;}
+.ps-status{font-family:var(--mono);font-size:9px;text-align:center;margin-bottom:12px;}
+.ps-map{background:var(--bg3);border-radius:12px;height:100px;margin-bottom:10px;position:relative;overflow:hidden;border:1px solid var(--border);}
+.ps-map-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(30,58,40,0.4) 1px,transparent 1px),linear-gradient(90deg,rgba(30,58,40,0.4) 1px,transparent 1px);background-size:16px 16px;}
+.ps-person-dot{position:absolute;width:12px;height:12px;background:var(--green);border-radius:50%;border:2px solid white;top:50%;left:45%;transform:translate(-50%,-50%);box-shadow:0 0 8px rgba(34,197,94,0.6);}
+.ps-pulse{position:absolute;top:50%;left:45%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--green);animation:ping 1.5s infinite;opacity:0.5;}
+.ps-route{position:absolute;inset:0;}
+.ps-metric-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}
+.ps-metric{background:var(--card2);border-radius:8px;padding:10px;text-align:center;border:1px solid var(--border);}
+.ps-metric-val{font-family:var(--display);font-size:22px;font-weight:700;}
+.ps-metric-val.ok{color:var(--green3);}
+.ps-metric-val.warn{color:var(--amber);}
+.ps-metric-lbl{font-family:var(--mono);font-size:8px;color:var(--text3);}
+.ps-alert-card{background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px;font-size:11px;color:var(--green3);text-align:center;}
+.app-features{display:flex;flex-direction:column;gap:16px;}
+.af-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;transition:all 0.3s;position:relative;overflow:hidden;}
+.af-card::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--green),var(--teal));}
+.af-card:hover{border-color:var(--border2);transform:translateX(4px);}
+.af-title{font-weight:700;font-size:14px;color:var(--snow);margin-bottom:5px;display:flex;align-items:center;gap:8px;}
+.af-desc{color:var(--text2);font-size:13px;line-height:1.6;}
+
+/* ========== ALERT OVERLAY ========== */
+.alert-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:2000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(10px);}
+.alert-overlay.show{display:flex;}
+.alert-modal{background:var(--card);border:1px solid rgba(248,113,113,0.4);border-radius:16px;padding:40px;max-width:480px;width:90%;text-align:center;box-shadow:0 0 80px rgba(248,113,113,0.12);animation:modalIn 0.35s cubic-bezier(0.34,1.56,0.64,1);}
+@keyframes modalIn{from{transform:scale(0.75);opacity:0;}to{transform:scale(1);opacity:1;}}
+.am-pulse{font-size:60px;animation:alertPulse 0.6s infinite alternate;}
+@keyframes alertPulse{to{transform:scale(1.15);}}
+.am-title{font-family:var(--display);font-size:30px;font-weight:700;color:var(--red);margin:12px 0 6px;}
+.am-sub{color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:18px;}
+.am-info{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11px;text-align:left;margin-bottom:14px;line-height:2;color:var(--text2);}
+.am-info .hi{color:var(--red);}
+.am-reason{display:inline-block;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);color:var(--amber);font-family:var(--mono);font-size:10px;padding:5px 12px;border-radius:4px;margin-bottom:18px;}
+.cd-ring{width:92px;height:92px;margin:0 auto 18px;position:relative;}
+.cd-ring svg{transform:rotate(-90deg);}
+.ring-t{fill:none;stroke:var(--border);stroke-width:5;}
+.ring-p{fill:none;stroke:var(--red);stroke-width:5;stroke-linecap:round;stroke-dasharray:264;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear;}
+.cd-n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:26px;color:var(--red);}
+.am-btns{display:flex;gap:12px;justify-content:center;}
+.btn-safe{background:var(--green);color:#000;border:none;padding:13px 28px;border-radius:8px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.btn-safe:hover{background:var(--green3);}
+.btn-dispatch{background:var(--red);color:white;border:none;padding:13px 28px;border-radius:8px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;}
+.btn-dispatch:hover{background:#dc2626;}
+.am-dispatched{display:none;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:14px;color:var(--green3);font-family:var(--mono);font-size:11px;margin-top:14px;line-height:1.9;}
+
+/* CONFIRM MODAL */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+.confirm-overlay.show{display:flex;}
+.confirm-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:360px;width:90%;text-align:center;animation:modalIn 0.3s ease;}
+.cm-icon{font-size:48px;margin-bottom:12px;}
+.cm-title{font-family:var(--display);font-size:22px;font-weight:700;margin-bottom:8px;color:var(--snow);}
+.cm-sub{color:var(--text2);font-size:13px;margin-bottom:22px;line-height:1.6;}
+.cm-btns{display:flex;gap:10px;justify-content:center;}
+.btn-yes{background:var(--green);color:#000;border:none;padding:11px 24px;border-radius:7px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;}
+.btn-no{background:transparent;color:var(--text2);border:1px solid var(--border);padding:11px 24px;border-radius:7px;font-family:var(--sans);font-size:13px;cursor:pointer;transition:all 0.2s;}
+.btn-no:hover{border-color:var(--border2);}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:3000;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);animation:toastIn 0.3s ease;}
+@keyframes toastIn{from{transform:translateY(16px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+/* FOOTER */
+footer{background:var(--bg3);border-top:1px solid var(--border);padding:48px;text-align:center;}
+.ft-logo{font-family:var(--display);font-size:28px;font-weight:700;color:var(--snow);margin-bottom:6px;}
+.ft-logo span{font-style:italic;color:var(--green3);}
+.ft-tag{color:var(--text3);font-size:13px;margin-bottom:28px;}
+.ft-team{display:flex;justify-content:center;gap:48px;margin-bottom:24px;flex-wrap:wrap;}
+.ft-member h4{font-weight:700;font-size:14px;color:var(--snow);}
+.ft-member p{font-size:12px;color:var(--text3);}
+.ft-copy{font-family:var(--mono);font-size:11px;color:var(--text3);}
+
+.fade-up{opacity:0;transform:translateY(22px);transition:all 0.65s ease;}
+.fade-up.visible{opacity:1;transform:translateY(0);}
+
+@media(max-width:900px){
+  nav{padding:14px 20px;}.nav-links{display:none;}
+  section,.dash-section,.live-section,.app-section{padding:60px 20px;}
+  .hero{padding:100px 20px 60px;}.hero-inner{grid-template-columns:1fr;}
+  .hiw-grid{grid-template-columns:1fr 1fr;}
+  .app-layout{grid-template-columns:1fr;}.phones-wrap{flex-direction:column;align-items:center;}
+  .dash-body,.lost-panel{grid-template-columns:1fr;}
+  .db-sidebar,.db-right,.lost-sidebar{display:none;}
+  .live-status-row{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ========== INTRO PAGE ========== -->
+<div id="introPage">
+  <div class="intro-beams">
+    <div class="beam"></div><div class="beam"></div><div class="beam"></div>
+    <div class="beam"></div><div class="beam"></div><div class="beam"></div>
+  </div>
+  <div class="intro-glow"></div>
+  <div class="intro-icon">🏔️</div>
+  <div class="intro-title">Trek<span class="italic">Safe</span></div>
+  <div class="intro-tag"><div class="intro-tag-dot"></div><span>Smart Pilgrim Health Monitoring</span></div>
+  <p class="intro-desc">A wearable emergency response system that detects life-threatening health deterioration in real time — alerting rescue teams before a pilgrim collapses.</p>
+  <button class="intro-btn" onclick="enterSite()">ENTER THE EXPERIENCE <span class="arrow">→</span></button>
+</div>
+
+<!-- ========== MAIN SITE ========== -->
+<div id="mainSite">
+
+<nav>
+  <div class="nav-logo">Trek<span>Safe</span></div>
+  <div class="nav-links">
+    <a href="#hero">Home</a>
+    <a href="#simulation">Dashboard</a>
+    <a href="#live">Live</a>
+    <a href="#app">Family App</a>
+  </div>
+  <div class="nav-live"><div class="nlive-dot"></div>SYSTEM ACTIVE</div>
+</nav>
+
+<!-- ========== SECTION 1: HERO ========== -->
+<section class="hero" id="hero">
+  <div class="hero-bg-glow"></div>
+  <div class="hero-bg-glow2"></div>
+  <div class="hero-grid-lines"></div>
+  <svg class="hero-mountain" viewBox="0 0 1440 300" preserveAspectRatio="none">
+    <path d="M0,300 L0,150 L120,60 L240,150 L360,30 L480,120 L600,20 L720,130 L840,40 L960,160 L1080,50 L1200,140 L1320,70 L1440,120 L1440,300Z" fill="white"/>
+  </svg>
+  <div class="hero-inner">
+    <div class="hero-left fade-up">
+      <div class="hero-eyebrow"><div class="hero-eyebrow-dot"></div><span>Smart Pilgrim Health Monitoring</span></div>
+      <h1>When the<br><span class="green italic">Mountain Strikes,</span><br>We Strike First.</h1>
+      <p class="hero-desc">TrekSafe is a wearable emergency response system for elderly pilgrims on high-altitude treks. It monitors health in real time, detects genuine emergencies using smart sensor fusion, and alerts rescue teams automatically — before collapse occurs.</p>
+      <div class="hero-stats">
+        <div class="hstat"><div class="hstat-n">400+</div><div class="hstat-l">Deaths · Char Dham 2019–23</div></div>
+        <div class="hstat"><div class="hstat-n">4–6 min</div><div class="hstat-l">To brain death · cardiac arrest</div></div>
+        <div class="hstat"><div class="hstat-n">30 min</div><div class="hstat-l">Current avg. response time</div></div>
+        <div class="hstat"><div class="hstat-n">₹50</div><div class="hstat-l">Net cost to the pilgrim</div></div>
+      </div>
+      <div class="hero-btns">
+        <a href="#simulation" class="btn-g">View Dashboard →</a>
+        <a href="#live" class="btn-ghost">Live Feed</a>
+      </div>
+    </div>
+    <div class="hero-right fade-up">
+      <div class="info-card"><div class="ic-title">⌚ Wearable Band</div><div class="ic-desc">ESP32 microcontroller with MAX30102 (heart rate + SpO2) and MPU6050 (accelerometer + gyroscope). Continuously reads vitals every second.</div></div>
+      <div class="info-card"><div class="ic-title">🧠 Smart Alert Logic</div><div class="ic-desc">Multi-sensor fusion — HR threshold + SpO2 drop + low movement = genuine emergency. Eliminates false positives from normal climbing exertion.</div></div>
+      <div class="info-card"><div class="ic-title">📡 LoRa Network</div><div class="ic-desc">RYLR998 module at 915MHz. 5–7km range through mountain terrain. No cellular signal required. Gateways every 2km connect to dashboard via 4G.</div></div>
+      <div class="info-card"><div class="ic-title">🏥 Help Centre Dashboard</div><div class="ic-desc">Real-time map of all active trekkers, live vitals, one-click dispatch. Transforms medical posts from reactive to proactive command centres.</div></div>
+      <div class="info-card"><div class="ic-title">💰 ₹650 Rental Model</div><div class="ic-desc">₹600 refunded on return. ₹50 non-refundable service fee. Mirrors Vaishno Devi RFID card system. Accessible to every pilgrim regardless of income.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<div class="hiw">
+  <div class="sec-eyebrow">System Overview</div>
+  <div class="sec-title">Four Steps from <em>Detection</em> to <span class="bl">Rescue</span></div>
+  <div class="hiw-grid fade-up">
+    <div class="hiw-card"><div class="hiw-n">01 / MONITOR</div><div class="hiw-icon">⌚</div><div class="hiw-t">Continuous Sensing</div><div class="hiw-d">ESP32 reads HR & SpO2 via MAX30102 and movement via MPU6050 — every second, without interruption, even offline.</div></div>
+    <div class="hiw-card"><div class="hiw-n">02 / ANALYZE</div><div class="hiw-icon">🧠</div><div class="hiw-t">Sensor Fusion Logic</div><div class="hiw-d">Cross-references all three sensors. High HR + falling SpO2 + low movement = genuine emergency, not just climbing exertion.</div></div>
+    <div class="hiw-card"><div class="hiw-n">03 / ALERT</div><div class="hiw-icon">🔔</div><div class="hiw-t">15-Second Window</div><div class="hiw-d">Buzzer fires. Pilgrim has 15 seconds to confirm safety. No response = automatic transmission of vitals + location via LoRa.</div></div>
+    <div class="hiw-card"><div class="hiw-n">04 / RESPOND</div><div class="hiw-icon">🚁</div><div class="hiw-t">Coordinated Dispatch</div><div class="hiw-d">Dashboard highlights nearest help centre. Team dispatched with live vitals and location. No phone call — just immediate response.</div></div>
+  </div>
+</div>
+
+<!-- ========== SECTION 2: SIMULATION DASHBOARD ========== -->
+<section class="dash-section" id="simulation">
+  <div class="sec-eyebrow">Simulation Dashboard</div>
+  <div class="sec-title">Help Centre <em>Command Centre</em></div>
+  <p class="sec-sub">Interactive simulation of what medical staff see in real time. Switch between Pilgrim Monitoring and Lost Person Tracking using the tabs below.</p>
+  <br><br>
+
+  <!-- TABS -->
+  <div class="dash-tab-bar">
+    <div class="dtab active" onclick="switchTab('pilgrim',this)">🏔️ Pilgrim Mode</div>
+    <div class="dtab" onclick="switchTab('lost',this)">🔍 Lost Person Tracking</div>
+  </div>
+
+  <!-- PILGRIM TAB -->
+  <div class="tab-content active" id="tab-pilgrim">
+    <div class="dash-controls">
+      <button class="dc-btn primary" onclick="triggerAlert('Ramesh Kumar',132,83,'HR↑ + SpO₂↓ + No Movement Detected')">🚨 Simulate Emergency</button>
+      <button class="dc-btn ghost" onclick="addTrekker()">＋ Add Trekker</button>
+      <button class="dc-btn ghost" onclick="toggleNetwork()">⚠️ Toggle Offline</button>
+    </div>
+    <div class="dash-shell">
+      <div class="dash-topbar">
+        <div class="dtb-left">
+          <div class="dtb-dots"><div class="dtb-dot" style="background:#f87171"></div><div class="dtb-dot" style="background:var(--amber)"></div><div class="dtb-dot" style="background:var(--green)"></div></div>
+          <div class="dtb-title">TREKSAFE COMMAND · VAISHNO DEVI ROUTE</div>
+        </div>
+        <div class="dtb-right">
+          <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+          <div class="dtb-clock" id="clockEl">--:--:--</div>
+        </div>
+      </div>
+      <div class="dash-body">
+        <!-- SIDEBAR -->
+        <div class="db-sidebar">
+          <div class="sidebar-hdr"><div class="sh-title">Active Trekkers</div><div class="sh-badge" id="activeCountEl">5</div></div>
+          <div class="sidebar-scroll" id="trekkerListEl"></div>
+          <div class="completed-panel" id="completedPanel" style="display:none">
+            <div class="cp-title">Completed Today</div>
+            <div id="completedItemsEl"></div>
+          </div>
+        </div>
+        <!-- MAIN -->
+        <div class="db-main">
+          <div class="map-area">
+            <div class="map-grid-bg"></div>
+            <div class="map-glow"></div>
+            <div class="map-lbl" style="top:11px;left:12px;">VAISHNO DEVI ROUTE · LIVE MAP</div>
+            <div class="map-lbl" style="bottom:11px;left:12px;color:var(--blue2);">▲ KATRA BASE → BHAWAN SHRINE</div>
+            <svg style="position:absolute;inset:0;width:100%;height:100%">
+              <path d="M 70,78% Q 190,48% 310,40% Q 420,32% 530,44% Q 630,52% 700,60%" stroke="rgba(56,189,248,0.22)" stroke-width="2" stroke-dasharray="8,5" fill="none"/>
+            </svg>
+            <div class="hc-pin" style="left:14%;top:70%;"><div class="hc-ring"></div><div class="hc-dot"></div><div class="hc-lbl">HC-1 Katra</div></div>
+            <div class="hc-pin" style="left:42%;top:32%;"><div class="hc-ring"></div><div class="hc-dot"></div><div class="hc-lbl">HC-2 Mid</div></div>
+            <div class="hc-pin" style="left:72%;top:40%;"><div class="hc-ring"></div><div class="hc-dot"></div><div class="hc-lbl">HC-3 Bhawan</div></div>
+            <div id="mapPinsEl"></div>
+            <div class="map-legend">
+              <div class="ml-item"><div class="ml-dot" style="background:var(--blue2)"></div>Help Centre</div>
+              <div class="ml-item"><div class="ml-dot" style="background:var(--green)"></div>Safe</div>
+              <div class="ml-item"><div class="ml-dot" style="background:var(--amber)"></div>Warning</div>
+              <div class="ml-item"><div class="ml-dot" style="background:var(--red)"></div>Emergency</div>
+            </div>
+          </div>
+          <div class="vitals-row">
+            <div class="vcard" id="hrCard"><div class="vc-lbl">Heart Rate</div><div class="vc-val ok" id="hrValEl">--</div><div class="vc-unit">BPM</div><div class="vc-sub" id="hrSubEl">Select a trekker</div></div>
+            <div class="vcard" id="spo2Card"><div class="vc-lbl">Blood Oxygen SpO₂</div><div class="vc-val ok" id="spo2ValEl">--</div><div class="vc-unit">%</div><div class="vc-sub" id="spo2SubEl">Select a trekker</div></div>
+            <div class="vcard" id="motionCard"><div class="vc-lbl">Movement</div><div class="vc-val ok" id="motionValEl" style="font-size:18px;padding-top:10px;">--</div><div class="vc-unit"></div><div class="vc-sub" id="motionSubEl">Accelerometer + Gyro</div></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-lbl">VITALS HISTORY — LAST 30 READINGS · <span id="selectedNameEl">No trekker selected</span></div>
+            <canvas id="vitalsChart" height="72"></canvas>
+          </div>
+        </div>
+        <!-- RIGHT -->
+        <div class="db-right">
+          <div>
+            <div class="rp-title">Device Status</div>
+            <div class="dev-row"><div class="dr-l">Battery</div><div class="dr-v" id="battValEl">--</div></div>
+            <div class="batt-bar"><div class="batt-fill" id="battFillEl" style="width:0%"></div></div>
+            <div class="dev-row" style="margin-top:9px;"><div class="dr-l">Signal</div><div class="sig-bars" id="sigBarsEl"><div class="sbar on" style="height:5px"></div><div class="sbar on" style="height:9px"></div><div class="sbar on" style="height:13px"></div><div class="sbar on" style="height:17px"></div><div class="sbar" style="height:21px"></div></div></div>
+            <div class="dev-row"><div class="dr-l">Last Sync</div><div class="dr-v" id="lastSyncEl">--</div></div>
+            <div class="dev-row"><div class="dr-l">Altitude</div><div class="dr-v">2,847 m</div></div>
+          </div>
+          <div>
+            <div class="rp-title">Network Status</div>
+            <div class="net-box">
+              <div class="net-row"><div class="net-lbl">LoRa 915MHz</div><div class="nbadge on" id="loraBadge">ONLINE ✓</div></div>
+              <div class="net-row"><div class="net-lbl">Gateway</div><div class="nbadge on" id="gwBadge">CONNECTED</div></div>
+              <div class="net-row"><div class="net-lbl">GSM Fallback</div><div class="nbadge gsm" id="gsmBadge">STANDBY</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="rp-title">Help Centres</div>
+            <div class="hc-list">
+              <div class="hc-item nearest" id="hcItem1"><div class="hc-row"><div class="hc-n">HC-2 Mid Route</div><div class="hc-badge">NEAREST</div></div><div class="hc-status">🟢 Staff ready · 1.2 km</div></div>
+              <div class="hc-item" id="hcItem2"><div class="hc-row"><div class="hc-n">HC-3 Bhawan</div><div class="hc-dist">2.1 km</div></div><div class="hc-status">🟢 Staff ready</div></div>
+              <div class="hc-item" id="hcItem3"><div class="hc-row"><div class="hc-n">HC-1 Katra</div><div class="hc-dist">3.8 km</div></div><div class="hc-status">🟡 1 staff on route</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="rp-title">Analytics</div>
+            <div class="ana-grid">
+              <div class="ana-box"><div class="ana-n" id="anaTotalEl">5</div><div class="ana-l">Active</div></div>
+              <div class="ana-box"><div class="ana-n" id="anaAlertsEl">2</div><div class="ana-l">Alerts Today</div></div>
+              <div class="ana-box"><div class="ana-n" id="anaCompEl">0</div><div class="ana-l">Completed</div></div>
+              <div class="ana-box"><div class="ana-n">98%</div><div class="ana-l">Uptime</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOST PERSON TAB -->
+  <div class="tab-content" id="tab-lost">
+    <div class="dash-controls">
+      <button class="dc-btn primary" onclick="triggerLostAlert()">🚨 Simulate Lost Alert</button>
+      <button class="dc-btn ghost" onclick="updateLostPosition()">📍 Update Location</button>
+    </div>
+    <div class="dash-shell">
+      <div class="dash-topbar">
+        <div class="dtb-left">
+          <div class="dtb-dots"><div class="dtb-dot" style="background:#f87171"></div><div class="dtb-dot" style="background:var(--amber)"></div><div class="dtb-dot" style="background:var(--blue)"></div></div>
+          <div class="dtb-title">TREKSAFE — LOST PERSON TRACKING MODE</div>
+        </div>
+        <div class="dtb-right">
+          <div class="live-pill"><div class="live-dot"></div>TRACKING ACTIVE</div>
+        </div>
+      </div>
+      <div class="lost-panel">
+        <div class="lost-sidebar">
+          <div class="lost-title">Tracked Persons</div>
+          <div class="lost-mode-toggle">
+            <div class="lmt on">All</div>
+            <div class="lmt" onclick="filterLost('child',this)">Children</div>
+            <div class="lmt" onclick="filterLost('elder',this)">Elders</div>
+          </div>
+          <div class="lost-cards" id="lostCardsEl"></div>
+        </div>
+        <div class="lost-main">
+          <div class="lost-map" id="lostMapEl">
+            <div class="map-grid-bg"></div>
+            <div class="map-glow"></div>
+            <div class="map-lbl" style="top:11px;left:12px;">LIVE LOCATION TRACKING</div>
+            <svg style="position:absolute;inset:0;width:100%;height:100%">
+              <path d="M 60,80% Q 180,55% 300,48% Q 410,40% 520,52% Q 610,60% 680,68%" stroke="rgba(56,189,248,0.18)" stroke-width="2" stroke-dasharray="8,5" fill="none"/>
+            </svg>
+            <div class="hc-pin" style="left:14%;top:72%;"><div class="hc-ring"></div><div class="hc-dot"></div><div class="hc-lbl">Base Point</div></div>
+            <div id="lostPinsEl"></div>
+            <div class="map-legend">
+              <div class="ml-item"><div class="ml-dot" style="background:var(--blue2)"></div>Base/Checkpoint</div>
+              <div class="ml-item"><div class="ml-dot" style="background:var(--green)"></div>Located / Safe</div>
+              <div class="ml-item"><div class="ml-dot" style="background:var(--red)"></div>Missing / Alert</div>
+            </div>
+          </div>
+          <div class="lost-status-bar" id="lostStatusBar">
+            <div class="lsb-card"><div class="lsb-lbl">Last Seen</div><div class="lsb-val" id="lsbLastSeen">--</div><div class="lsb-sub">Time ago</div></div>
+            <div class="lsb-card"><div class="lsb-lbl">Distance from Base</div><div class="lsb-val" id="lsbDist">--</div><div class="lsb-sub">Estimated via signal</div></div>
+            <div class="lsb-card"><div class="lsb-lbl">Battery</div><div class="lsb-val" id="lsbBatt">--</div><div class="lsb-sub">Device power</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 3: LIVE DASHBOARD ========== -->
+<section class="live-section" id="live">
+  <div class="sec-eyebrow">Live Data Feed</div>
+  <div class="sec-title">Real-Time <em>Device Data</em></div>
+  <p class="sec-sub">When the Arduino prototype is built and connected, this dashboard receives live health data directly from the wearable device. This section shows the connection architecture and what real data will look like.</p>
+  <div class="live-shell fade-up">
+    <div class="live-topbar">
+      <div class="dtb-left">
+        <div class="dtb-dots"><div class="dtb-dot" style="background:#f87171"></div><div class="dtb-dot" style="background:var(--amber)"></div><div class="dtb-dot" style="background:var(--green)"></div></div>
+        <div class="dtb-title">TREKSAFE · LIVE DEVICE CONNECTION</div>
+      </div>
+      <div class="dtb-right">
+        <div class="live-pill" style="color:var(--amber);border-color:rgba(251,191,36,0.3);background:rgba(251,191,36,0.08);"><div class="live-dot" style="background:var(--amber)"></div>AWAITING DEVICE</div>
+      </div>
+    </div>
+    <div class="live-status-row">
+      <div class="ls-card"><div class="ls-icon">⌚</div><div class="ls-label">ESP32 Device</div><div class="ls-val" style="font-size:18px;color:var(--amber);">NOT CONNECTED</div><div class="ls-status wait">Awaiting device on COM port</div></div>
+      <div class="ls-card"><div class="ls-icon">📡</div><div class="ls-label">LoRa Signal</div><div class="ls-val" style="font-size:18px;color:var(--text3);">—</div><div class="ls-status wait">No signal received</div></div>
+      <div class="ls-card"><div class="ls-icon">❤️</div><div class="ls-label">Heart Rate</div><div class="ls-val" id="liveHR" style="color:var(--text3);">—</div><div class="ls-status wait">Waiting for data</div></div>
+      <div class="ls-card"><div class="ls-icon">🫁</div><div class="ls-label">SpO₂</div><div class="ls-val" id="liveSpO2" style="color:var(--text3);">—</div><div class="ls-status wait">Waiting for data</div></div>
+    </div>
+    <div class="live-placeholder">
+      <div class="lp-icon">🔌</div>
+      <div class="lp-title">Connect Your TrekSafe Device</div>
+      <p class="lp-desc">Once the Arduino prototype is built, the device sends data to this dashboard via LoRa → Gateway → API. The simulation dashboard above shows exactly what this will look like with live data.</p>
+      <div class="code-block">
+        <span style="color:var(--text3);">// ESP32 sends this JSON every 2 seconds</span><br>
+        <span style="color:var(--green3);">{</span><br>
+        &nbsp;&nbsp;<span style="color:var(--blue2);">"device_id"</span>: <span style="color:var(--amber);">"TREK_001"</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--blue2);">"hr"</span>: <span style="color:var(--green3);">88</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--blue2);">"spo2"</span>: <span style="color:var(--green3);">96</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--blue2);">"motion"</span>: <span style="color:var(--amber);">"walking"</span>,<br>
+        &nbsp;&nbsp;<span style="color:var(--blue2);">"alert"</span>: <span style="color:var(--red);">false</span><br>
+        <span style="color:var(--green3);">}</span>
+      </div>
+      <div class="api-endpoint">POST → https://treksafe.in/api/v1/vitals · Bearer token required</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 4: FAMILY APP ========== -->
+<section class="app-section" id="app">
+  <div class="sec-eyebrow">Family App</div>
+  <div class="sec-title">Peace of Mind for <em>Loved Ones</em></div>
+  <p class="sec-sub">While the pilgrim treks, their family at home sees live location, vitals, and instant alerts — in their language, on their phone.</p>
+  <div class="app-layout">
+    <div class="phones-wrap fade-up">
+      <div class="phone small">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="ps-header">TREKSAFE FAMILY</div>
+          <div class="ps-name">Sunita Devi</div>
+          <div class="ps-status" style="color:var(--amber);">⚠️ Monitor</div>
+          <div class="ps-map">
+            <div class="ps-map-grid"></div>
+            <svg class="ps-route" viewBox="0 0 160 100" preserveAspectRatio="none"><path d="M10,80 Q50,40 80,35 Q110,28 140,50" stroke="rgba(56,189,248,0.3)" stroke-width="1.5" stroke-dasharray="5,3" fill="none"/></svg>
+            <div class="ps-person-dot"></div>
+            <div class="ps-pulse"></div>
+          </div>
+          <div class="ps-metric-row">
+            <div class="ps-metric"><div class="ps-metric-val warn">104</div><div class="ps-metric-lbl">BPM</div></div>
+            <div class="ps-metric"><div class="ps-metric-val ok">92%</div><div class="ps-metric-lbl">SpO₂</div></div>
+          </div>
+          <div class="ps-alert-card">⚠️ Elevated readings detected</div>
+        </div>
+      </div>
+      <div class="phone main">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="ps-header">TREKSAFE FAMILY</div>
+          <div class="ps-name">Ramesh Kumar</div>
+          <div class="ps-status" style="color:var(--green3);">✓ All Clear</div>
+          <div class="ps-map">
+            <div class="ps-map-grid"></div>
+            <svg class="ps-route" viewBox="0 0 160 100" preserveAspectRatio="none"><path d="M10,80 Q50,40 80,35 Q110,28 140,50" stroke="rgba(56,189,248,0.3)" stroke-width="1.5" stroke-dasharray="5,3" fill="none"/></svg>
+            <div class="ps-person-dot" style="left:25%;top:45%;"></div>
+            <div class="ps-pulse" style="left:25%;top:45%;"></div>
+          </div>
+          <div class="ps-metric-row">
+            <div class="ps-metric"><div class="ps-metric-val ok" id="appHR">88</div><div class="ps-metric-lbl">BPM</div></div>
+            <div class="ps-metric"><div class="ps-metric-val ok" id="appSpO2">96</div><div class="ps-metric-lbl">SpO₂</div></div>
+          </div>
+          <div class="ps-alert-card" style="color:var(--green3);border-color:rgba(34,197,94,0.2);background:rgba(34,197,94,0.05);">✓ Stable · Near HC-2 Mid Route</div>
+        </div>
+      </div>
+    </div>
+    <div class="app-features fade-up">
+      <div class="af-card"><div class="af-title">📍 Live Location Tracking</div><div class="af-desc">Real-time map showing exactly where your loved one is on the route, updated every 2 seconds via LoRa gateway triangulation.</div></div>
+      <div class="af-card"><div class="af-title">❤️ Live Vitals Feed</div><div class="af-desc">Heart rate and SpO2 displayed in real time. Color-coded — green means safe, amber means monitor, red means emergency response activated.</div></div>
+      <div class="af-card"><div class="af-title">🚨 Instant Alert Notifications</div><div class="af-desc">Push notification the moment an emergency is detected — before the ambulance is even dispatched. You know before anyone else.</div></div>
+      <div class="af-card"><div class="af-title">🌐 Multilingual Support</div><div class="af-desc">Available in Hindi, Tamil, Telugu, Bengali, and Punjabi. Built for the real demographic, not just English speakers.</div></div>
+      <div class="af-card"><div class="af-title">🆘 Bystander First Aid Mode</div><div class="af-desc">If you're nearby, the app detects proximity to an emergency and shows step-by-step first aid instructions — CPR guide, recovery position, SpO2 response.</div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="ft-logo">Trek<span>Safe</span></div>
+  <div class="ft-tag">Smart Pilgrim Health Monitoring & Emergency Response System</div>
+  <div class="ft-team">
+    <div class="ft-member"><h4>[Student Name]</h4><p>Creator & Lead Engineer</p></div>
+    <div class="ft-member"><h4>Ms. Geetika Mehta</h4><p>Mentor</p></div>
+    <div class="ft-member"><h4>Mr. Vishal Yadav</h4><p>Mentor</p></div>
+  </div>
+  <div class="ft-copy">Delhi Public School, Greater Faridabad · CBSE Science Exhibition 2025–26</div>
+</footer>
+
+</div><!-- end mainSite -->
+
+<!-- ALERT MODAL -->
+<div class="alert-overlay" id="alertOverlay">
+  <div class="alert-modal">
+    <div class="am-pulse">🚨</div>
+    <div class="am-title">EMERGENCY ALERT</div>
+    <div class="am-sub">Critical pattern detected. Pilgrim has not responded within 15 seconds.</div>
+    <div class="am-info" id="amInfoEl">Loading...</div>
+    <div class="am-reason" id="amReasonEl">⚠️ Reason</div>
+    <div class="cd-ring"><svg width="92" height="92"><circle class="ring-t" cx="46" cy="46" r="42"/><circle class="ring-p" cx="46" cy="46" r="42" id="ringProgEl"/></svg><div class="cd-n" id="cdNumEl">30</div></div>
+    <div class="am-btns" id="amBtnsEl">
+      <button class="btn-safe" onclick="cancelAlert()">✓ Pilgrim Is Safe</button>
+      <button class="btn-dispatch" onclick="dispatchNow()">🚑 Dispatch Now</button>
+    </div>
+    <div class="am-dispatched" id="amDispatched">✅ TEAM DISPATCHED<br>En route from HC-2 Mid Route · ETA 4 minutes<br>Nearby volunteers notified · Family app alerted</div>
+  </div>
+</div>
+
+<!-- CONFIRM REMOVE -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-modal">
+    <div class="cm-icon">✅</div>
+    <div class="cm-title">Trek Completed?</div>
+    <div class="cm-sub" id="cmSubEl">Mark this trekker as having completed the yatra?</div>
+    <div class="cm-btns">
+      <button class="btn-yes" onclick="confirmRemove()">Yes, Remove</button>
+      <button class="btn-no" onclick="closeConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toastEl"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ===== INTRO =====
+function enterSite(){
+  document.getElementById('introPage').classList.add('exit');
+  setTimeout(()=>{
+    document.getElementById('introPage').style.display='none';
+    document.getElementById('mainSite').classList.add('visible');
+    document.body.style.overflow='auto';
+  },900);
+}
+document.body.style.overflow='hidden';
+
+// ===== TABS =====
+function switchTab(name,el){
+  document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// ===== PILGRIM DATA =====
+let trekkers=[
+  {id:1,name:'Ramesh Kumar',age:68,hr:88,spo2:96,movement:'Walking',status:'green',x:'22%',y:'64%'},
+  {id:2,name:'Sunita Devi',age:72,hr:104,spo2:91,movement:'Slow',status:'amber',x:'38%',y:'38%'},
+  {id:3,name:'Arvind Singh',age:61,hr:118,spo2:93,movement:'Walking',status:'amber',x:'55%',y:'28%'},
+  {id:4,name:'Meena Patel',age:75,hr:78,spo2:97,movement:'Resting',status:'green',x:'65%',y:'44%'},
+  {id:5,name:'Gopal Rao',age:69,hr:92,spo2:95,movement:'Walking',status:'green',x:'48%',y:'54%'},
+];
+let completed=[];
+let selected=trekkers[0];
+let alertActive=false;
+let cdTimer=null;
+let netOnline=true;
+let pendingRemoveId=null;
+let chartData={hr:[],spo2:[],labels:[]};
+let myChart=null;
+
+function renderList(){
+  document.getElementById('trekkerListEl').innerHTML=trekkers.map(t=>`
+    <div class="trek-card ${selected&&selected.id===t.id?'sel':''}" id="tc_${t.id}" onclick="selectTrekker(${t.id})">
+      <div class="tc-top">
+        <div class="tc-name">${t.name}</div>
+        <div class="tc-actions">
+          <button class="remove-btn" onclick="event.stopPropagation();askRemove(${t.id})">✓ Done</button>
+          <div class="status-pip pip-${t.status}"></div>
+        </div>
+      </div>
+      <div class="tc-vitals">
+        <div class="tcv"><span class="v">${t.hr}</span><div class="l">BPM</div></div>
+        <div class="tcv"><span class="v">${t.spo2}%</span><div class="l">SpO₂</div></div>
+        <div class="tcv"><span class="v" style="font-size:9px">${t.movement}</span><div class="l">Motion</div></div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('activeCountEl').textContent=trekkers.length;
+  document.getElementById('anaTotalEl').textContent=trekkers.length;
+  document.getElementById('anaCompEl').textContent=completed.length;
+  const cp=document.getElementById('completedPanel');
+  if(completed.length>0){
+    cp.style.display='block';
+    document.getElementById('completedItemsEl').innerHTML=completed.map(t=>`<div class="cp-item"><span class="cp-check">✓</span>${t.name} · ${new Date(t.at).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit'})}</div>`).join('');
+  } else cp.style.display='none';
+}
+
+function renderPins(){
+  document.getElementById('mapPinsEl').innerHTML=trekkers.map(t=>`
+    <div class="tpin" style="left:${t.x};top:${t.y}" onclick="selectTrekker(${t.id})">
+      <div class="tpin-lbl">${t.name.split(' ')[0]}</div>
+      <div class="tpin-dot" style="background:${t.status==='green'?'var(--green)':t.status==='amber'?'var(--amber)':'var(--red)'}"></div>
+    </div>
+  `).join('');
+}
+
+function selectTrekker(id){
+  selected=trekkers.find(t=>t.id===id);
+  if(!selected)return;
+  renderList();
+  const t=selected;
+  document.getElementById('hrValEl').textContent=t.hr;
+  document.getElementById('spo2ValEl').textContent=t.spo2;
+  document.getElementById('motionValEl').textContent=t.movement;
+  document.getElementById('hrSubEl').textContent=`Age ${t.age}`;
+  document.getElementById('spo2SubEl').textContent=t.movement;
+  document.getElementById('motionSubEl').textContent=t.status==='green'?'Normal':'Reduced movement';
+  document.getElementById('selectedNameEl').textContent=t.name;
+  const hc=t.hr>120?'danger':t.hr>100?'warn':'ok';
+  const sc=t.spo2<90?'danger':t.spo2<94?'warn':'ok';
+  document.getElementById('hrValEl').className='vc-val '+hc;
+  document.getElementById('spo2ValEl').className='vc-val '+sc;
+  document.getElementById('hrCard').className='vcard'+(hc==='danger'?' danger':hc==='warn'?' warn':'');
+  document.getElementById('spo2Card').className='vcard'+(sc==='danger'?' danger':sc==='warn'?' warn':'');
+  const b=Math.floor(Math.random()*35)+50;
+  document.getElementById('battValEl').textContent=b+'%';
+  document.getElementById('battFillEl').style.width=b+'%';
+  // Update family app
+  document.getElementById('appHR').textContent=t.hr;
+  document.getElementById('appSpO2').textContent=t.spo2;
+  resetChart();
+}
+
+function liveUpdate(){
+  trekkers.forEach(t=>{
+    t.hr=Math.max(60,Math.min(155,t.hr+Math.floor(Math.random()*7-3)));
+    t.spo2=Math.max(84,Math.min(100,t.spo2+Math.floor(Math.random()*3-1)));
+    t.status=t.hr>125&&t.spo2<91?'red':t.hr>105||t.spo2<94?'amber':'green';
+  });
+  if(selected){selected=trekkers.find(t=>t.id===selected.id)||selected;selectTrekker(selected.id);}
+  renderList();renderPins();
+  if(selected&&myChart){
+    const now=new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    chartData.labels.push(now);chartData.hr.push(selected.hr);chartData.spo2.push(selected.spo2);
+    if(chartData.labels.length>30){chartData.labels.shift();chartData.hr.shift();chartData.spo2.shift();}
+    myChart.update('none');
+  }
+}
+
+function initChart(){
+  const ctx=document.getElementById('vitalsChart').getContext('2d');
+  for(let i=0;i<20;i++){chartData.labels.push('');chartData.hr.push(82+Math.floor(Math.random()*12));chartData.spo2.push(93+Math.floor(Math.random()*5));}
+  myChart=new Chart(ctx,{type:'line',data:{labels:chartData.labels,datasets:[
+    {label:'HR (BPM)',data:chartData.hr,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.07)',borderWidth:2,pointRadius:0,tension:0.4,fill:true},
+    {label:'SpO₂ (%)',data:chartData.spo2,borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,0.06)',borderWidth:2,pointRadius:0,tension:0.4,fill:true,yAxisID:'y2'}
+  ]},options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#3d6b4a',font:{family:'DM Mono',size:10}}}},scales:{
+    x:{display:false},
+    y:{position:'left',min:50,max:170,grid:{color:'#1e3a28'},ticks:{color:'#22c55e',font:{family:'DM Mono',size:9},stepSize:30}},
+    y2:{position:'right',min:80,max:100,grid:{drawOnChartArea:false},ticks:{color:'#38bdf8',font:{family:'DM Mono',size:9}}}
+  }}});
+}
+
+function resetChart(){
+  chartData={hr:[],spo2:[],labels:[]};
+  const t=selected||trekkers[0];
+  for(let i=0;i<20;i++){chartData.labels.push('');chartData.hr.push(t.hr+Math.floor(Math.random()*8-4));chartData.spo2.push(t.spo2+Math.floor(Math.random()*4-2));}
+  if(myChart){myChart.data.labels=chartData.labels;myChart.data.datasets[0].data=chartData.hr;myChart.data.datasets[1].data=chartData.spo2;myChart.update();}
+}
+
+// ===== REMOVE =====
+function askRemove(id){
+  pendingRemoveId=id;
+  const t=trekkers.find(x=>x.id===id);
+  document.getElementById('cmSubEl').textContent=`Mark ${t.name} (Age ${t.age}) as trek completed and remove from active monitoring?`;
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+function closeConfirm(){document.getElementById('confirmOverlay').classList.remove('show');pendingRemoveId=null;}
+function confirmRemove(){
+  if(!pendingRemoveId)return;
+  const t=trekkers.find(x=>x.id===pendingRemoveId);
+  if(!t){closeConfirm();return;}
+  const card=document.getElementById('tc_'+pendingRemoveId);
+  if(card)card.classList.add('removing');
+  setTimeout(()=>{
+    completed.push({...t,at:Date.now()});
+    trekkers=trekkers.filter(x=>x.id!==pendingRemoveId);
+    if(selected&&selected.id===pendingRemoveId){selected=trekkers[0]||null;if(selected)selectTrekker(selected.id);}
+    renderList();renderPins();
+    showToast(`✅ ${t.name} completed trek — removed from monitoring`);
+  },420);
+  closeConfirm();
+}
+
+function addTrekker(){
+  const names=['Vijay Kumar','Priya Sharma','Suresh Nair','Lakshmi Iyer','Deepak Verma'];
+  const n=names[Math.floor(Math.random()*names.length)];
+  const pos=[{x:'30%',y:'50%'},{x:'60%',y:'60%'},{x:'25%',y:'30%'}];
+  const p=pos[Math.floor(Math.random()*pos.length)];
+  trekkers.push({id:Date.now(),name:n,age:58+Math.floor(Math.random()*20),hr:80+Math.floor(Math.random()*25),spo2:93+Math.floor(Math.random()*5),movement:'Walking',status:'green',x:p.x,y:p.y});
+  renderList();renderPins();
+  showToast(`➕ ${n} joined the route`);
+}
+
+// ===== ALERT =====
+function triggerAlert(name,hr,spo2,reason){
+  if(alertActive)return;
+  alertActive=true;
+  document.getElementById('amInfoEl').innerHTML=`<b>Trekker:</b> ${name}<br><b>HR:</b> <span class="hi">${hr} BPM</span>  <b>SpO₂:</b> <span class="hi">${spo2}%</span><br><b>Location:</b> Near HC-2 Mid Route (~1.2km)<br><b>Status:</b> NOT RESPONDING TO BAND ALERT`;
+  document.getElementById('amReasonEl').textContent='⚠️ '+reason;
+  document.getElementById('amDispatched').style.display='none';
+  document.getElementById('amBtnsEl').style.display='flex';
+  document.getElementById('alertOverlay').classList.add('show');
+  let count=30;
+  const ring=document.getElementById('ringProgEl');
+  const num=document.getElementById('cdNumEl');
+  ring.style.strokeDashoffset='0';num.textContent=count;
+  cdTimer=setInterval(()=>{count--;num.textContent=count;ring.style.strokeDashoffset=((30-count)/30)*264;if(count<=0){clearInterval(cdTimer);dispatchNow();}},1000);
+  document.getElementById('anaAlertsEl').textContent=parseInt(document.getElementById('anaAlertsEl').textContent)+1;
+}
+function cancelAlert(){clearInterval(cdTimer);document.getElementById('alertOverlay').classList.remove('show');alertActive=false;showToast('✅ Alert cancelled — pilgrim confirmed safe');}
+function dispatchNow(){
+  clearInterval(cdTimer);
+  document.getElementById('amBtnsEl').style.display='none';
+  document.getElementById('amDispatched').style.display='block';
+  const hc=document.getElementById('hcItem1');
+  hc.classList.add('dispatching');
+  hc.innerHTML='<div class="hc-row"><div class="hc-n">HC-2 Mid Route</div><div class="hc-dbadge">DISPATCHING 🚑</div></div><div class="hc-status">🔴 Team en route · ETA 4 min</div>';
+  setTimeout(()=>{
+    document.getElementById('alertOverlay').classList.remove('show');
+    alertActive=false;
+    hc.classList.remove('dispatching');
+    hc.innerHTML='<div class="hc-row"><div class="hc-n">HC-2 Mid Route</div><div class="hc-badge">NEAREST</div></div><div class="hc-status">🟢 Staff ready · 1.2 km</div>';
+    showToast('🚑 Team dispatched · ETA 4 minutes');
+  },3500);
+}
+
+// ===== NETWORK =====
+function toggleNetwork(){
+  netOnline=!netOnline;
+  document.getElementById('loraBadge').textContent=netOnline?'ONLINE ✓':'OFFLINE ✗';
+  document.getElementById('loraBadge').className='nbadge '+(netOnline?'on':'off');
+  document.getElementById('gwBadge').textContent=netOnline?'CONNECTED':'DISCONNECTED';
+  document.getElementById('gwBadge').className='nbadge '+(netOnline?'on':'off');
+  document.getElementById('gsmBadge').textContent=netOnline?'STANDBY':'ACTIVE (FALLBACK)';
+  document.getElementById('gsmBadge').className='nbadge '+(netOnline?'gsm':'on');
+  showToast(netOnline?'✅ LoRa restored':'⚠️ LoRa offline — GSM fallback active');
+}
+
+// ===== LOST PERSON =====
+let lostPersons=[
+  {id:1,name:'Aryan Sharma',type:'child',age:9,x:'35%',y:'42%',status:'green',dist:'1.2 km',batt:'82%',lastSeen:'2 min ago'},
+  {id:2,name:'Dadi Ji',type:'elder',age:78,x:'58%',y:'35%',status:'red',dist:'3.1 km',batt:'61%',lastSeen:'8 min ago'},
+  {id:3,name:'Priya Mehra',type:'child',age:12,x:'45%',y:'62%',status:'green',dist:'0.8 km',batt:'91%',lastSeen:'1 min ago'},
+];
+let selectedLost=lostPersons[0];
+
+function renderLostCards(filter){
+  const filtered=filter?lostPersons.filter(p=>p.type===filter):lostPersons;
+  document.getElementById('lostCardsEl').innerHTML=filtered.map(p=>`
+    <div class="lcard ${selectedLost&&selectedLost.id===p.id?'sel':''}" onclick="selectLost(${p.id})">
+      <div class="lcard-top">
+        <div class="lcard-name">${p.name}</div>
+        <div class="lcard-type ${p.type}">${p.type==='child'?'👶 Child':'👴 Elder'}</div>
+      </div>
+      <div class="lcard-info">Age ${p.age} · <span style="color:${p.status==='green'?'var(--green)':'var(--red)'}">${p.status==='green'?'Located':'⚠️ Missing'}</span></div>
+    </div>
+  `).join('');
+  renderLostPins();
+  if(selectedLost)updateLostStatus(selectedLost);
+}
+
+function renderLostPins(){
+  document.getElementById('lostPinsEl').innerHTML=lostPersons.map(p=>`
+    <div class="tpin" style="left:${p.x};top:${p.y}" onclick="selectLost(${p.id})">
+      <div class="tpin-lbl">${p.name.split(' ')[0]}</div>
+      <div class="tpin-dot" style="background:${p.status==='green'?'var(--green)':'var(--red)'}"></div>
+    </div>
+  `).join('');
+}
+
+function selectLost(id){
+  selectedLost=lostPersons.find(p=>p.id===id);
+  if(!selectedLost)return;
+  updateLostStatus(selectedLost);
+  renderLostCards();
+}
+
+function updateLostStatus(p){
+  document.getElementById('lsbLastSeen').textContent=p.lastSeen;
+  document.getElementById('lsbDist').textContent=p.dist;
+  document.getElementById('lsbBatt').textContent=p.batt;
+}
+
+function filterLost(type,el){
+  document.querySelectorAll('.lmt').forEach(e=>e.classList.remove('on'));
+  el.classList.add('on');
+  renderLostCards(type);
+}
+
+function triggerLostAlert(){
+  const p=selectedLost||lostPersons[1];
+  triggerAlert(p.name+' ('+( p.type==='child'?'Child':'Elder')+')',0,0,'Person has not moved for 12+ minutes — possible lost');
+}
+
+function updateLostPosition(){
+  if(!selectedLost)return;
+  const xOpts=['30%','45%','55%','65%','40%'];
+  const yOpts=['35%','45%','55%','40%','60%'];
+  selectedLost.x=xOpts[Math.floor(Math.random()*xOpts.length)];
+  selectedLost.y=yOpts[Math.floor(Math.random()*yOpts.length)];
+  selectedLost.lastSeen='Just now';
+  renderLostCards();
+  showToast(`📍 ${selectedLost.name} location updated`);
+}
+
+// ===== UTILS =====
+function showToast(msg){const t=document.getElementById('toastEl');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3200);}
+function updateClock(){if(document.getElementById('clockEl'))document.getElementById('clockEl').textContent=new Date().toLocaleTimeString('en',{hour12:false});}
+function updateSync(){if(document.getElementById('lastSyncEl'))document.getElementById('lastSyncEl').textContent=[1,2,3,2,1][Math.floor(Math.random()*5)]+'s ago';}
+function observeFadeUps(){
+  const obs=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
+  document.querySelectorAll('.fade-up').forEach(el=>obs.observe(el));
+}
+
+// ===== INIT =====
+window.onload=()=>{
+  renderList();renderPins();selectTrekker(1);
+  initChart();
+  renderLostCards();
+  updateClock();setInterval(updateClock,1000);
+  setInterval(liveUpdate,2200);
+  setInterval(updateSync,2800);
+  observeFadeUps();
+};
+</script>
+</body>
+</html>

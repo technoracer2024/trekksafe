@@ -177,33 +177,98 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
     onClose();
   };
 
-  const ARDUINO_CODE = `// TrekSafe IoT Prototype Firmware (ESP8266 / ESP32 / Arduino)
-// Compatible with MAX30102 Heart Rate + MPU6050 Accelerometer
+  const ARDUINO_CODE = `// TrekSafe Real Sensor Firmware (ESP8266 / ESP32 / Arduino)
+// Required Libraries: "SparkFun MAX3010x" & "Adafruit MPU6050"
 #include <Wire.h>
+#include "MAX30105.h"
+#include "heartRate.h"
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+
+MAX30105 particleSensor;
+Adafruit_MPU6050 mpu;
+
+const byte RATE_SIZE = 4;
+byte rates[RATE_SIZE];
+byte rateSpot = 0;
+long lastBeat = 0;
+float beatsPerMinute = 0;
+int beatAvg = 0;
+int spo2 = 0;
+unsigned long lastSend = 0;
 
 void setup() {
-  Serial.begin(115200); // Set to 115200 baud in Web Serial modal
-  Wire.begin();
+  Serial.begin(115200);
+  Wire.begin(4, 5); // SDA = D2 (GPIO 4), SCL = D1 (GPIO 5)
+
+  if (particleSensor.begin(Wire, I2C_SPEED_FAST)) {
+    particleSensor.setup();
+    particleSensor.setPulseAmplitudeRed(0x0A);
+    particleSensor.setPulseAmplitudeGreen(0);
+  }
+
+  if (mpu.begin()) {
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  }
 }
 
 void loop() {
-  int hr = random(74, 88);     // Replace with max30102.getHeartRate()
-  int spo2 = random(96, 99);   // Replace with max30102.getSpO2()
-  String mot = "Walking";      // Or "Fallen" if accelerometer spike detected
+  long irValue = particleSensor.getIR();
+
+  // Beat Detection
+  if (checkForBeat(irValue) == true) {
+    long delta = millis() - lastBeat;
+    lastBeat = millis();
+    beatsPerMinute = 60 / (delta / 1000.0);
+    if (beatsPerMinute < 255 && beatsPerMinute > 40) {
+      rates[rateSpot++] = (byte)beatsPerMinute;
+      rateSpot %= RATE_SIZE;
+      beatAvg = 0;
+      for (byte x = 0; x < RATE_SIZE; x++) beatAvg += rates[x];
+      beatAvg /= RATE_SIZE;
+    }
+  }
+
+  // Finger removed check
+  if (irValue < 50000) {
+    beatAvg = 0;
+    spo2 = 0;
+  } else if (beatAvg > 45) {
+    long redValue = particleSensor.getRed();
+    float ratio = ((float)redValue / (float)irValue);
+    spo2 = constrain((int)(110 - (25 * ratio)), 88, 100);
+  }
+
+  // MPU6050 Fall Detection
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+  float totalAccel = sqrt(a.acceleration.x * a.acceleration.x + 
+                          a.acceleration.y * a.acceleration.y + 
+                          a.acceleration.z * a.acceleration.z);
+
   int fall = 0;
+  String motion = "Stationary";
+  if (totalAccel > 22.0 || totalAccel < 2.5) {
+    fall = 1;
+    motion = "⚠️ FALL DETECTED";
+  } else if (totalAccel > 11.5) {
+    motion = "Walking";
+  }
 
-  // Print standard JSON line
-  Serial.print("{\"hr\":");
-  Serial.print(hr);
-  Serial.print(",\"spo2\":");
-  Serial.print(spo2);
-  Serial.print(",\"mot\":\"");
-  Serial.print(mot);
-  Serial.print("\",\"fall\":");
-  Serial.print(fall);
-  Serial.println("}");
-
-  delay(1500); // Send every 1.5 seconds
+  // Print telemetry JSON line every 1.5s
+  if (millis() - lastSend > 1500) {
+    lastSend = millis();
+    Serial.print("{\\"hr\\":");
+    Serial.print(beatAvg);
+    Serial.print(",\\"spo2\\":");
+    Serial.print(spo2);
+    Serial.print(",\\"mot\\":\\"");
+    Serial.print(motion);
+    Serial.print("\\",\\"fall\\":");
+    Serial.print(fall);
+    Serial.println("}");
+  }
 }`;
 
   const copyCode = () => {

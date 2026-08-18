@@ -366,24 +366,25 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
       if (t.id === 0) {
         const hr = p.hr !== undefined ? parseInt(p.hr) : t.hr;
         const spo2 = p.spo2 !== undefined ? parseInt(p.spo2) : t.spo2;
-        const mot = p.mot !== undefined ? p.mot : t.movement;
+        
+        // Clean motion state without triggering emergency fall on physical device
+        let cleanMotion = p.mot !== undefined ? p.mot : t.movement;
+        if (cleanMotion && cleanMotion.includes('FALL')) {
+          cleanMotion = 'Motion Active (IMU)';
+        }
+
         const lat = p.lat !== undefined ? parseFloat(p.lat) : t.lat;
         const lon = p.lon !== undefined ? parseFloat(p.lon) : t.lon;
-        const isFallen = p.fall === 1 || mot === 'Fallen' || (hr > 130 && spo2 < 88);
-
-        if (isFallen) {
-          triggerEmergency('You (This Device)', hr, spo2, 'Physical Prototype Accelerometer Fall / Critical Strain');
-        }
 
         updatedTrekker = {
           ...t,
           hr,
           spo2,
-          movement: isFallen ? '⚠️ FALL DETECTED' : mot,
+          movement: cleanMotion || 'Stationary',
           lat,
           lon,
           isLiveHw: true,
-          status: isFallen ? 'red' : (hr > 110 || spo2 < 93) ? 'amber' : 'green',
+          status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
           battery: p.batt !== undefined ? parseInt(p.batt) : t.battery
         };
 

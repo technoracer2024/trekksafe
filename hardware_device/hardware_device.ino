@@ -1,5 +1,5 @@
 // ============================================================
-// TrekSafe Telemetry Node - GPS First with Wi-Fi Positioning Fallback
+// TrekSafe Telemetry Node - Strict GPS with Static Faridabad Fallback
 // ESP8266 + SSD1306 OLED Display (I2C) + GPS Module (UART)
 //
 // Wiring:
@@ -8,9 +8,9 @@
 //   On-board LED:    D4 (GPIO 2 - Blinks on live packet)
 //
 // Behavior:
-//   1. Reads real coordinates from physical GPS module on D5/D6.
-//   2. If GPS fix is not acquired (indoors), falls back smoothly to Wi-Fi positioning.
-//   3. Synchronizes identical live vitals and location to OLED & USB Serial.
+//   1. Physical GPS is primary: decodes real satellites from NEO-6M on D5/D6.
+//   2. If GPS has no fix (e.g. searching), holds STRICT STATIC Faridabad position (28.40890, 77.31780).
+//   3. No simulated drift or random location changes.
 // ============================================================
 
 #include <Wire.h>
@@ -31,15 +31,18 @@ bool oledOK = false;
 bool gpsFix = false;
 unsigned long lastGpsSentenceTime = 0;
 
-// Simulated Vitals & State
+// Simulated Vitals
 int currentHR = 76;
 int currentSpO2 = 98;
 int battery = 96;
 String motion = "Walking";
 
-// Faridabad Default / Wi-Fi Positioning Coordinates
-float currentLat = 28.40890;
-float currentLon = 77.31780;
+// Faridabad Static Base Coordinates
+const float STATIC_FARIDABAD_LAT = 28.40890;
+const float STATIC_FARIDABAD_LON = 77.31780;
+
+float currentLat = STATIC_FARIDABAD_LAT;
+float currentLon = STATIC_FARIDABAD_LON;
 
 // Simulation Counters
 int motionCycle = 0;
@@ -50,47 +53,115 @@ bool ledState = false;
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
 
-// Non-blocking NMEA GPS Decoder
+// Non-blocking Dual NMEA GPS Decoder (Supports RMC & GGA)
 void checkGPS() {
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
-    static char buf[100];
+    static char buf[120];
     static int pos = 0;
-    if (c == '\n' || c == '\r') {
-      if (pos > 10 && (strncmp(buf, "$GPRMC", 6) == 0 || strncmp(buf, "$GNRMC", 6) == 0)) {
-        char* c1 = strchr(buf, ',');
-        if (c1) {
-          char* c2 = strchr(c1 + 1, ',');
-          if (c2 && *(c2 + 1) == 'A') { // 'A' = Valid satellite fix
-            char* c3 = strchr(c2 + 1, ',');
-            char* c4 = strchr(c3 + 1, ',');
-            char* c5 = strchr(c4 + 1, ',');
-            char* c6 = strchr(c5 + 1, ',');
-            if (c3 && c4 && c5 && c6) {
-              gpsFix = true;
-              lastGpsSentenceTime = millis();
-              float rawLat = atof(c3 + 1);
-              int degLat = (int)(rawLat / 100);
-              currentLat = degLat + ((rawLat - degLat * 100) / 60.0);
-              if (*(c4 + 1) == 'S') currentLat = -currentLat;
 
-              float rawLon = atof(c5 + 1);
-              int degLon = (int)(rawLon / 100);
-              currentLon = degLon + ((rawLon - degLon * 100) / 60.0);
-              if (*(c6 + 1) == 'W') currentLon = -currentLon;
-            }
+    if (c == '$') {
+      pos = 0;
+      buf[pos++] = c;
+    } else if (pos > 0) {
+      if (c == '\n' || c == '\r') {
+        buf[pos] = '\0';
+
+        // 1. Check RMC sentence ($GPRMC or $GNRMC)
+        if (strstr(buf, "RMC") != NULL) {
+          char tempBuf[120];
+          strncpy(tempBuf, buf, 119);
+          tempBuf[119] = '\0';
+
+          char* token = strtok(tempBuf, ",");
+          int commaCount = 0;
+          char status = 'V';
+          char rawLatStr[16] = {0};
+          char latDir = 'N';
+          char rawLonStr[16] = {0};
+          char lonDir = 'E';
+
+          while (token != NULL) {
+            commaCount++;
+            if (commaCount == 3) status = token[0];
+            else if (commaCount == 4) strncpy(rawLatStr, token, 15);
+            else if (commaCount == 5) latDir = token[0];
+            else if (commaCount == 6) strncpy(rawLonStr, token, 15);
+            else if (commaCount == 7) lonDir = token[0];
+            token = strtok(NULL, ",");
+          }
+
+          if (status == 'A' && strlen(rawLatStr) > 3 && strlen(rawLonStr) > 3) {
+            float rawLat = atof(rawLatStr);
+            int degLat = (int)(rawLat / 100);
+            float lat = degLat + ((rawLat - degLat * 100) / 60.0);
+            if (latDir == 'S') lat = -lat;
+
+            float rawLon = atof(rawLonStr);
+            int degLon = (int)(rawLon / 100);
+            float lon = degLon + ((rawLon - degLon * 100) / 60.0);
+            if (lonDir == 'W') lon = -lon;
+
+            currentLat = lat;
+            currentLon = lon;
+            gpsFix = true;
+            lastGpsSentenceTime = millis();
           }
         }
+        // 2. Check GGA sentence ($GPGGA or $GNGGA)
+        else if (strstr(buf, "GGA") != NULL) {
+          char tempBuf[120];
+          strncpy(tempBuf, buf, 119);
+          tempBuf[119] = '\0';
+
+          char* token = strtok(tempBuf, ",");
+          int commaCount = 0;
+          char rawLatStr[16] = {0};
+          char latDir = 'N';
+          char rawLonStr[16] = {0};
+          char lonDir = 'E';
+          int quality = 0;
+
+          while (token != NULL) {
+            commaCount++;
+            if (commaCount == 3) strncpy(rawLatStr, token, 15);
+            else if (commaCount == 4) latDir = token[0];
+            else if (commaCount == 5) strncpy(rawLonStr, token, 15);
+            else if (commaCount == 6) lonDir = token[0];
+            else if (commaCount == 7) quality = atoi(token);
+            token = strtok(NULL, ",");
+          }
+
+          if (quality > 0 && strlen(rawLatStr) > 3 && strlen(rawLonStr) > 3) {
+            float rawLat = atof(rawLatStr);
+            int degLat = (int)(rawLat / 100);
+            float lat = degLat + ((rawLat - degLat * 100) / 60.0);
+            if (latDir == 'S') lat = -lat;
+
+            float rawLon = atof(rawLonStr);
+            int degLon = (int)(rawLon / 100);
+            float lon = degLon + ((rawLon - degLon * 100) / 60.0);
+            if (lonDir == 'W') lon = -lon;
+
+            currentLat = lat;
+            currentLon = lon;
+            gpsFix = true;
+            lastGpsSentenceTime = millis();
+          }
+        }
+
+        pos = 0;
+      } else if (pos < 115) {
+        buf[pos++] = c;
       }
-      pos = 0;
-    } else if (pos < 98) {
-      buf[pos++] = c;
     }
   }
 
-  // If no GPS fix sentence for > 5 seconds, switch back to Wi-Fi positioning fallback
-  if (gpsFix && (millis() - lastGpsSentenceTime > 5000)) {
+  // If no GPS fix sentence for > 6 seconds, stay on STATIC Faridabad coordinates
+  if (gpsFix && (millis() - lastGpsSentenceTime > 6000)) {
     gpsFix = false;
+    currentLat = STATIC_FARIDABAD_LAT;
+    currentLon = STATIC_FARIDABAD_LON;
   }
 }
 
@@ -105,10 +176,10 @@ void setup() {
 
   Serial.println();
   Serial.println("=================================================");
-  Serial.println("   TREKSAFE TELEMETRY NODE (GPS + WIFI POS)      ");
+  Serial.println("   TREKSAFE GPS TELEMETRY NODE (ESP8266)         ");
   Serial.println("=================================================");
-  Serial.println("🛰️ GPS Module on D5 (RX) / D6 (TX) @ 9600 baud");
-  Serial.println("📶 Wi-Fi Positioning active as seamless fallback");
+  Serial.println("🛰️ GPS Module listening on D5 (RX) / D6 (TX) @ 9600 baud");
+  Serial.println("📍 Fallback: Static Faridabad (28.40890, 77.31780)");
   Serial.println("⚡ Broadcasting live JSON telemetry at 115200 baud...");
 
   // 3. Initialize GPS Software UART
@@ -133,7 +204,7 @@ void setup() {
     display.setCursor(20, 36);
     display.print("Faridabad Node");
     display.setCursor(20, 48);
-    display.print("GPS + Wi-Fi Pos");
+    display.print("GPS Telemetry");
     display.display();
     delay(1000);
     Serial.println("✅ [OLED] SSD1306 Display connected and ready");
@@ -154,7 +225,7 @@ void loop() {
   unsigned long now = millis();
 
   // ==========================================================
-  // UPDATE SIMULATION & VITALS (Every 1000ms)
+  // UPDATE VITALS (Every 1000ms)
   // ==========================================================
   if (now - lastSend >= 1000) {
     lastSend = now;
@@ -169,16 +240,7 @@ void loop() {
 
     // 3. Motion Cycle (10s Walking, 5s Stationary)
     motionCycle = (motionCycle + 1) % 15;
-    if (motionCycle < 10) {
-      motion = "Walking";
-      if (!gpsFix) {
-        // Micro-walking drift around Wi-Fi base location when GPS is searching
-        currentLat += (random(-3, 6) * 0.00001);
-        currentLon += (random(-2, 5) * 0.00001);
-      }
-    } else {
-      motion = "Stationary";
-    }
+    motion = (motionCycle < 10) ? "Walking" : "Stationary";
 
     // Toggle live heart icon & LED pulse
     heartBeatIcon = !heartBeatIcon;
@@ -219,7 +281,7 @@ void loop() {
     display.setCursor(0, 0);
     display.print("TREKSAFE");
     display.setCursor(64, 0);
-    display.print(gpsFix ? "GPS:LOCK" : "WIFI:POS");
+    display.print(gpsFix ? "GPS:LOCK" : "FARIDABAD");
     display.setCursor(120, 0);
     display.print(heartBeatIcon ? "*" : " ");
     display.drawLine(0, 9, 127, 9, SSD1306_WHITE);

@@ -368,7 +368,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     const lon = p.lon !== undefined ? parseFloat(p.lon) : undefined;
     const batt = p.batt !== undefined ? parseInt(p.batt) : 96;
 
-    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📶 Wi-Fi Geolocation (Fallback)';
+    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📍 Static Faridabad Base (Searching GPS)';
 
     setTrekkers(prev => prev.map(t => {
       if (t.id === 0) {

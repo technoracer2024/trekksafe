@@ -204,13 +204,26 @@ export default function SatelliteMap() {
     updateMarkers();
   }, [trekkers, selectTrekker, updateUserLocation]);
 
-  // Center on Selected Trekker
+  // Center on Selected Trekker (on ID change or coordinate update)
   useEffect(() => {
     if (!mapInstanceRef.current || !selectedTrekker) return;
     if (selectedTrekker.lat && selectedTrekker.lon) {
       mapInstanceRef.current.panTo([selectedTrekker.lat, selectedTrekker.lon], { animate: true, duration: 0.8 });
     }
-  }, [selectedTrekker?.id]);
+  }, [selectedTrekker?.id, selectedTrekker?.lat, selectedTrekker?.lon]);
+
+  const centerOnTrail = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo([33.0145, 74.9460], 13, { duration: 1 });
+    }
+  };
+
+  const centerOnUser = () => {
+    const userT = trekkers.find(t => t.isUser) || trekkers[0];
+    if (mapInstanceRef.current && userT.lat && userT.lon) {
+      mapInstanceRef.current.flyTo([userT.lat, userT.lon], 15, { duration: 1 });
+    }
+  };
 
   return (
     <div className="relative w-full h-full min-h-[340px] bg-slate-950 overflow-hidden rounded-t-lg">
@@ -222,14 +235,34 @@ export default function SatelliteMap() {
         {isSatelliteMode ? '🛰️ ULTRA-HD SATELLITE IMAGERY' : '🗺️ TOPOGRAPHIC TERRAIN VIEW'}
       </div>
 
-      {/* Layer Toggle Button */}
-      <button
-        onClick={() => setIsSatelliteMode(prev => !prev)}
-        className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-900/85 hover:bg-cyan-900/60 backdrop-blur-md border border-cyan-500/50 text-[10px] font-mono font-bold text-slate-100 hover:text-white transition-all shadow-lg hover:-translate-y-0.5"
-      >
-        <span>{isSatelliteMode ? '🗺️' : '🛰️'}</span>
-        <span>{isSatelliteMode ? 'Switch to Topo' : 'Switch to Satellite'}</span>
-      </button>
+      {/* Map Control Buttons (Top Right) */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+        <button
+          onClick={centerOnTrail}
+          title="Recenter view on Vaishno Devi mountain trail"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-900/85 hover:bg-cyan-900/60 backdrop-blur-md border border-cyan-500/50 text-[10px] font-mono font-bold text-slate-100 hover:text-cyan-300 transition-all shadow-lg hover:-translate-y-0.5"
+        >
+          <span>🏔️</span>
+          <span>Trail View</span>
+        </button>
+
+        <button
+          onClick={centerOnUser}
+          title="Pan to Your live GPS marker"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-cyan-600/85 hover:bg-cyan-500 backdrop-blur-md border border-cyan-300/50 text-[10px] font-mono font-bold text-white transition-all shadow-lg hover:-translate-y-0.5"
+        >
+          <span>📍</span>
+          <span>Find You</span>
+        </button>
+
+        <button
+          onClick={() => setIsSatelliteMode(prev => !prev)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-900/85 hover:bg-cyan-900/60 backdrop-blur-md border border-cyan-500/50 text-[10px] font-mono font-bold text-slate-100 hover:text-white transition-all shadow-lg hover:-translate-y-0.5"
+        >
+          <span>{isSatelliteMode ? '🗺️' : '🛰️'}</span>
+          <span>{isSatelliteMode ? 'Topo' : 'Satellite'}</span>
+        </button>
+      </div>
 
       {/* Map Legend */}
       <div className="absolute bottom-3 right-3 z-10 p-2.5 rounded-lg bg-slate-950/90 backdrop-blur-md border border-slate-700/60 text-[10px] space-y-1 shadow-xl">

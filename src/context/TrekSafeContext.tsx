@@ -363,12 +363,17 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     const hr = p.hr !== undefined ? parseInt(p.hr) : 76;
     const spo2 = p.spo2 !== undefined ? parseInt(p.spo2) : 98;
     let cleanMotion = p.mot !== undefined ? String(p.mot) : 'Walking';
-    if (cleanMotion.includes('FALL')) cleanMotion = 'Motion Active (IMU)';
+    const isFall = p.fall === 1 || p.fall === true || cleanMotion.includes('CRITICAL') || (cleanMotion.includes('FALL') && !cleanMotion.includes('s'));
     const lat = p.lat !== undefined ? parseFloat(p.lat) : undefined;
     const lon = p.lon !== undefined ? parseFloat(p.lon) : undefined;
     const batt = p.batt !== undefined ? parseInt(p.batt) : 96;
 
-    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📍 Static Faridabad Base (Searching GPS)';
+    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📶 High-Accuracy Wi-Fi Positioning';
+
+    if (isFall) {
+      triggerEmergency('You (This Device)', hr, spo2, 'MPU6050 Accelerometer Impact: 15s Fall Timeout (No Response) — Immediate Rescue Dispatch Required!');
+      showToast('🚨 CRITICAL FALL IMPACT DETECTED! Emergency rescue protocol initiated!');
+    }
 
     setTrekkers(prev => prev.map(t => {
       if (t.id === 0) {
@@ -376,11 +381,11 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           ...t,
           hr,
           spo2,
-          movement: cleanMotion,
+          movement: isFall ? '⚠️ CRITICAL FALL DETECTED' : cleanMotion,
           lat: lat ?? t.lat,
           lon: lon ?? t.lon,
           isLiveHw: true,
-          status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
+          status: isFall ? 'red' : (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
           battery: batt,
           gpsStatus: gpsStatusStr
         };
@@ -396,14 +401,14 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           age: 'Self',
           hr,
           spo2,
-          movement: cleanMotion,
-          status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
+          movement: isFall ? '⚠️ CRITICAL FALL DETECTED' : cleanMotion,
+          status: isFall ? 'red' : (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
           lat: lat ?? (prev?.lat ?? 28.4089),
           lon: lon ?? (prev?.lon ?? 77.3178),
           isUser: true,
           isLiveHw: true,
           medicalCondition: 'None (Healthy)',
-          riskLevel: 'normal',
+          riskLevel: isFall ? 'high' : 'normal',
           routeIndex: 0,
           battery: batt,
           gpsStatus: gpsStatusStr
@@ -428,7 +433,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     }));
 
     setHardwareConnected(true);
-  }, []);
+  }, [triggerEmergency, showToast]);
 
   const [isCalibrated, setIsCalibrated] = useState<boolean>(false);
 

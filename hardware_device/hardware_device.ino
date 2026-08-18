@@ -1,12 +1,13 @@
 // ============================================================
-// TrekSafe Telemetry Firmware (ESP8266 + OLED + Pulse + MPU6050 + GPS)
+// TrekSafe Telemetry Firmware (ESP8266 + OLED + HW-827 Pulse + MPU6050 + GPS)
 //
-// Wiring Guide:
-//   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
-//   MPU6050:         SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
-//   Pulse Sensor:    Signal -> A0 (Analog) or D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
+// Your Exact Wiring:
+//   I2C Bus:         SDA -> D1 (GPIO 5), SCL -> D2 (GPIO 4), VCC -> 3V3, GND -> GND
+//   OLED Display:    SDA -> D1, SCL -> D2, VCC -> 3V3, GND -> GND
+//   MPU6050:         SDA -> D1, SCL -> D2, VCC -> 3V3, GND -> GND
+//   HW-827 Pulse:    Signal -> D3 (GPIO 0) / A0 (Analog), VCC -> 3V3/5V, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
-//   Built-in LED:    D4 / GPIO 2 (Blinks with live heartbeat)
+//   Built-in LED:    D4 / GPIO 2 (Blinks on every pulse)
 // ============================================================
 
 #include <Wire.h>
@@ -25,9 +26,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
-#define PULSE_PIN_DIGITAL D3
-#define PULSE_PIN_ANALOG A0
-#define ONBOARD_LED LED_BUILTIN // NodeMCU Built-in Blue LED (GPIO 2 / D4)
+#define HW827_DIGITAL D3
+#define HW827_ANALOG A0
+#define ONBOARD_LED LED_BUILTIN // NodeMCU Blue LED
 
 bool oledOK = false;
 bool mpuOK = false;
@@ -43,7 +44,7 @@ String motion = "Stationary";
 float currentLat = 28.4089;
 float currentLon = 77.3178;
 
-// Pulse sensor tracking
+// Pulse sensor tracking for HW-827
 int lastPinState = LOW;
 unsigned long lastBeatTime = 0;
 const int RATE_SIZE = 4;
@@ -58,7 +59,7 @@ unsigned long frameCount = 0;
 bool heartBeatIcon = false;
 bool ledState = false;
 
-// I2C Probe Helper
+// I2C Probe Helper (With SDA=D1, SCL=D2)
 bool checkI2C(uint8_t addr) {
   Wire.beginTransmission(addr);
   return (Wire.endTransmission() == 0);
@@ -103,11 +104,11 @@ void checkGPS() {
 }
 
 void setup() {
-  // 1. Configure On-board LED immediately
+  // 1. Configure On-board Blue LED immediately
   pinMode(ONBOARD_LED, OUTPUT);
-  digitalWrite(ONBOARD_LED, LOW); // Turn LED ON (Active LOW on ESP8266)
+  digitalWrite(ONBOARD_LED, LOW); // Turn LED ON on boot
 
-  // 2. Initialize Serial FIRST at 115200 baud
+  // 2. Initialize Serial at 115200 baud FIRST
   Serial.begin(115200);
   delay(200);
 
@@ -116,23 +117,23 @@ void setup() {
   Serial.println("   TREKSAFE TELEMETRY NODE (FARIDABAD)  ");
   Serial.println("========================================");
 
-  // 3. Setup Pulse Sensor Inputs
-  pinMode(PULSE_PIN_DIGITAL, INPUT_PULLUP);
+  // 3. Setup HW-827 Inputs
+  pinMode(HW827_DIGITAL, INPUT_PULLUP);
   pinMode(D5, INPUT_PULLUP); // GPS RX
 
   // 4. Initialize GPS Software UART
   gpsSerial.begin(9600);
 
-  // 5. Initialize I2C Bus for ESP8266 (D2=SDA, D1=SCL)
-  Wire.begin(D2, D1);
+  // 5. Initialize I2C Bus with YOUR EXACT PINS: SDA=D1, SCL=D2
+  Wire.begin(D1, D2);
   Wire.setClock(100000); // 100 kHz standard clock
+  Serial.println("✅ [I2C] Initialized with SDA=D1 (GPIO 5), SCL=D2 (GPIO 4)");
 
-  // 6. Safe OLED Initialization (Try 0x3C and 0x3D)
+  // 6. Safe OLED Initialization (Try 0x3C and 0x3D on SDA=D1, SCL=D2)
   uint8_t oledAddr = 0x3C;
   if (checkI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
   else if (checkI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
 
-  // Attempt OLED begin
   if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
     display.clearDisplay();
     display.dim(false); // Maximum brightness
@@ -150,7 +151,6 @@ void setup() {
     delay(1000);
     Serial.println("✅ [OLED] Display ready at 0x3C/0x3D");
   } else {
-    // If not detected via checkI2C, attempt direct begin
     if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
       oledOK = true;
       display.clearDisplay();
@@ -162,18 +162,18 @@ void setup() {
       Serial.println("✅ [OLED] Display started on 0x3C");
     } else {
       oledOK = false;
-      Serial.println("⚠️ [OLED] Not detected on I2C (check D2=SDA, D1=SCL)");
+      Serial.println("⚠️ [OLED] Display not detected on I2C (check D1=SDA, D2=SCL)");
     }
   }
 
-  // 7. Initialize MPU6050
-  if (mpu.begin()) {
+  // 7. Initialize MPU6050 on SDA=D1, SCL=D2
+  if (mpu.begin(0x68, &Wire) || mpu.begin(0x69, &Wire) || mpu.begin()) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    Serial.println("✅ [MPU6050] Accelerometer OK");
+    Serial.println("✅ [MPU6050] Accelerometer OK on SDA=D1, SCL=D2");
   } else {
-    Serial.println("⚠️ [MPU6050] Accelerometer not detected");
+    Serial.println("⚠️ [MPU6050] Accelerometer not detected (check D1=SDA, D2=SCL)");
   }
 
   digitalWrite(ONBOARD_LED, HIGH); // Turn LED OFF after boot
@@ -185,10 +185,10 @@ void loop() {
   // 1. Process GPS Data (Non-blocking)
   checkGPS();
 
-  // 2. Read Pulse Sensor (Supports Digital D3 or Analog A0)
-  int rawDigital = digitalRead(PULSE_PIN_DIGITAL);
-  int rawAnalog = analogRead(PULSE_PIN_ANALOG);
-  bool pulseDetected = (rawDigital == HIGH) || (rawAnalog > 560);
+  // 2. Read HW-827 Pulse Sensor (Digital D3 or Analog A0)
+  int rawDigital = digitalRead(HW827_DIGITAL);
+  int rawAnalog = analogRead(HW827_ANALOG);
+  bool pulseDetected = (rawDigital == HIGH) || (rawAnalog > 550);
 
   if (pulseDetected && lastPinState == LOW) {
     unsigned long now = millis();
@@ -204,7 +204,7 @@ void loop() {
       currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 95, 99);
       heartBeatIcon = true;
 
-      // Pulse LED briefly on real heartbeat
+      // Pulse on-board LED briefly on real heartbeat
       digitalWrite(ONBOARD_LED, LOW);
     } else if (lastBeatTime == 0 || delta >= 1400) {
       lastBeatTime = now;
@@ -214,7 +214,7 @@ void loop() {
   }
   lastPinState = pulseDetected ? HIGH : LOW;
 
-  // 3. Dynamic Physiological Drift if idle for > 2.5s (Keeps vitals realistic & active)
+  // 3. Dynamic Physiological Drift if HW-827 is idle > 2.5s
   if (millis() - lastBeatTime > 2500) {
     if (millis() - lastVitals > 1000) {
       lastVitals = millis();
@@ -225,13 +225,13 @@ void loop() {
       currentSpO2 = constrain(currentSpO2, 96, 99);
       heartBeatIcon = !heartBeatIcon; // Toggle pulse indicator
       
-      // Blink LED every second to show alive state
+      // Blink on-board LED every second
       ledState = !ledState;
       digitalWrite(ONBOARD_LED, ledState ? LOW : HIGH);
     }
   }
 
-  // 4. Read MPU6050 Motion
+  // 4. Read Real MPU6050 Motion
   if (mpuOK) {
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
@@ -240,7 +240,9 @@ void loop() {
       a.acceleration.y * a.acceleration.y +
       a.acceleration.z * a.acceleration.z
     );
-    if (totalAccel > 11.5 || totalAccel < 8.2) {
+    
+    // Total Earth gravity is ~9.8 m/s^2. When shaken, acceleration deviates significantly:
+    if (totalAccel > 12.0 || totalAccel < 7.5) {
       motion = "Walking";
     } else {
       motion = "Stationary";

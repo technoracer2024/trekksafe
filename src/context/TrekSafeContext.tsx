@@ -368,6 +368,8 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     const lon = p.lon !== undefined ? parseFloat(p.lon) : undefined;
     const batt = p.batt !== undefined ? parseInt(p.batt) : 96;
 
+    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📶 Wi-Fi Geolocation (Fallback)';
+
     setTrekkers(prev => prev.map(t => {
       if (t.id === 0) {
         return {
@@ -380,7 +382,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           isLiveHw: true,
           status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
           battery: batt,
-          gpsStatus: 'Live GPS (Serial Sync)'
+          gpsStatus: gpsStatusStr
         };
       }
       return t;
@@ -404,7 +406,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           riskLevel: 'normal',
           routeIndex: 0,
           battery: batt,
-          gpsStatus: 'Live GPS (Serial Sync)'
+          gpsStatus: gpsStatusStr
         };
       }
       return prev;

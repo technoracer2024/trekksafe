@@ -50,6 +50,7 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
             fall: parsed.fall === 1 || parsed.fall === true || parsed.mot === 'Fallen' ? 1 : 0,
             lat: parsed.lat ? parseFloat(parsed.lat) : undefined,
             lon: parsed.lon ? parseFloat(parsed.lon) : undefined,
+            gps: parsed.gps !== undefined ? parseInt(parsed.gps) : (parsed.lat ? 1 : 0),
             batt: parsed.batt ? parseInt(parsed.batt) : undefined
           };
         }

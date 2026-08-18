@@ -53,11 +53,31 @@ bool ledState = false;
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
 
-// Non-blocking Dual NMEA GPS Decoder (Supports RMC & GGA)
+// Robust NMEA field extractor that properly handles empty comma fields
+bool getNMEAField(const char* sentence, int targetIndex, char* output, int maxLen) {
+  int currentField = 0;
+  int outPos = 0;
+  output[0] = '\0';
+
+  for (int i = 0; sentence[i] != '\0' && sentence[i] != '*' && sentence[i] != '\r' && sentence[i] != '\n'; i++) {
+    if (sentence[i] == ',') {
+      currentField++;
+      if (currentField > targetIndex) break;
+    } else if (currentField == targetIndex) {
+      if (outPos < maxLen - 1) {
+        output[outPos++] = sentence[i];
+      }
+    }
+  }
+  output[outPos] = '\0';
+  return (outPos > 0);
+}
+
+// Non-blocking Robust GPS Sentence Decoder
 void checkGPS() {
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
-    static char buf[120];
+    static char buf[128];
     static int pos = 0;
 
     if (c == '$') {
@@ -67,40 +87,30 @@ void checkGPS() {
       if (c == '\n' || c == '\r') {
         buf[pos] = '\0';
 
-        // 1. Check RMC sentence ($GPRMC or $GNRMC)
+        // 1. Decode RMC Sentence ($GPRMC or $GNRMC)
         if (strstr(buf, "RMC") != NULL) {
-          char tempBuf[120];
-          strncpy(tempBuf, buf, 119);
-          tempBuf[119] = '\0';
+          char status[4] = {0};
+          char rawLat[16] = {0};
+          char latDir[4] = {0};
+          char rawLon[16] = {0};
+          char lonDir[4] = {0};
 
-          char* token = strtok(tempBuf, ",");
-          int commaCount = 0;
-          char status = 'V';
-          char rawLatStr[16] = {0};
-          char latDir = 'N';
-          char rawLonStr[16] = {0};
-          char lonDir = 'E';
+          getNMEAField(buf, 2, status, 3);
+          getNMEAField(buf, 3, rawLat, 15);
+          getNMEAField(buf, 4, latDir, 3);
+          getNMEAField(buf, 5, rawLon, 15);
+          getNMEAField(buf, 6, lonDir, 3);
 
-          while (token != NULL) {
-            commaCount++;
-            if (commaCount == 3) status = token[0];
-            else if (commaCount == 4) strncpy(rawLatStr, token, 15);
-            else if (commaCount == 5) latDir = token[0];
-            else if (commaCount == 6) strncpy(rawLonStr, token, 15);
-            else if (commaCount == 7) lonDir = token[0];
-            token = strtok(NULL, ",");
-          }
+          if (status[0] == 'A' && strlen(rawLat) >= 4 && strlen(rawLon) >= 4) {
+            float rLat = atof(rawLat);
+            int degLat = (int)(rLat / 100);
+            float lat = degLat + ((rLat - degLat * 100) / 60.0);
+            if (latDir[0] == 'S') lat = -lat;
 
-          if (status == 'A' && strlen(rawLatStr) > 3 && strlen(rawLonStr) > 3) {
-            float rawLat = atof(rawLatStr);
-            int degLat = (int)(rawLat / 100);
-            float lat = degLat + ((rawLat - degLat * 100) / 60.0);
-            if (latDir == 'S') lat = -lat;
-
-            float rawLon = atof(rawLonStr);
-            int degLon = (int)(rawLon / 100);
-            float lon = degLon + ((rawLon - degLon * 100) / 60.0);
-            if (lonDir == 'W') lon = -lon;
+            float rLon = atof(rawLon);
+            int degLon = (int)(rLon / 100);
+            float lon = degLon + ((rLon - degLon * 100) / 60.0);
+            if (lonDir[0] == 'W') lon = -lon;
 
             currentLat = lat;
             currentLon = lon;
@@ -108,40 +118,30 @@ void checkGPS() {
             lastGpsSentenceTime = millis();
           }
         }
-        // 2. Check GGA sentence ($GPGGA or $GNGGA)
+        // 2. Decode GGA Sentence ($GPGGA or $GNGGA)
         else if (strstr(buf, "GGA") != NULL) {
-          char tempBuf[120];
-          strncpy(tempBuf, buf, 119);
-          tempBuf[119] = '\0';
+          char rawLat[16] = {0};
+          char latDir[4] = {0};
+          char rawLon[16] = {0};
+          char lonDir[4] = {0};
+          char quality[4] = {0};
 
-          char* token = strtok(tempBuf, ",");
-          int commaCount = 0;
-          char rawLatStr[16] = {0};
-          char latDir = 'N';
-          char rawLonStr[16] = {0};
-          char lonDir = 'E';
-          int quality = 0;
+          getNMEAField(buf, 2, rawLat, 15);
+          getNMEAField(buf, 3, latDir, 3);
+          getNMEAField(buf, 4, rawLon, 15);
+          getNMEAField(buf, 5, lonDir, 3);
+          getNMEAField(buf, 6, quality, 3);
 
-          while (token != NULL) {
-            commaCount++;
-            if (commaCount == 3) strncpy(rawLatStr, token, 15);
-            else if (commaCount == 4) latDir = token[0];
-            else if (commaCount == 5) strncpy(rawLonStr, token, 15);
-            else if (commaCount == 6) lonDir = token[0];
-            else if (commaCount == 7) quality = atoi(token);
-            token = strtok(NULL, ",");
-          }
+          if (quality[0] >= '1' && quality[0] <= '8' && strlen(rawLat) >= 4 && strlen(rawLon) >= 4) {
+            float rLat = atof(rawLat);
+            int degLat = (int)(rLat / 100);
+            float lat = degLat + ((rLat - degLat * 100) / 60.0);
+            if (latDir[0] == 'S') lat = -lat;
 
-          if (quality > 0 && strlen(rawLatStr) > 3 && strlen(rawLonStr) > 3) {
-            float rawLat = atof(rawLatStr);
-            int degLat = (int)(rawLat / 100);
-            float lat = degLat + ((rawLat - degLat * 100) / 60.0);
-            if (latDir == 'S') lat = -lat;
-
-            float rawLon = atof(rawLonStr);
-            int degLon = (int)(rawLon / 100);
-            float lon = degLon + ((rawLon - degLon * 100) / 60.0);
-            if (lonDir == 'W') lon = -lon;
+            float rLon = atof(rawLon);
+            int degLon = (int)(rLon / 100);
+            float lon = degLon + ((rLon - degLon * 100) / 60.0);
+            if (lonDir[0] == 'W') lon = -lon;
 
             currentLat = lat;
             currentLon = lon;
@@ -151,13 +151,13 @@ void checkGPS() {
         }
 
         pos = 0;
-      } else if (pos < 115) {
+      } else if (pos < 120) {
         buf[pos++] = c;
       }
     }
   }
 
-  // If no GPS fix sentence for > 6 seconds, stay on STATIC Faridabad coordinates
+  // If no GPS satellite sentence for > 6 seconds, revert to static Faridabad coordinates
   if (gpsFix && (millis() - lastGpsSentenceTime > 6000)) {
     gpsFix = false;
     currentLat = STATIC_FARIDABAD_LAT;

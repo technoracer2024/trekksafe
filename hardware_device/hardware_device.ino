@@ -12,7 +12,7 @@
 //   - Simulates realistic Heart Rate (72 - 86 BPM)
 //   - Simulates realistic SpO2 (96% - 99%)
 //   - Simulates realistic Motion ("Walking" / "Stationary")
-//   - Simulates live GPS trail in Faridabad (28.4089° N, 77.3178° E)
+//   - Simulates live GPS trail in Faridabad (28.40890° N, 77.31780° E)
 //   - Synchronizes identical values to OLED Screen & USB Serial Monitor
 //   - Blinks on-board blue LED with each live telemetry packet
 // ============================================================
@@ -41,8 +41,7 @@ String motion = "Walking";
 float currentLat = 28.40890;
 float currentLon = 77.31780;
 
-// Simulation Step Counters
-int stepCounter = 0;
+// Simulation Counters
 int motionCycle = 0;
 bool heartBeatIcon = false;
 bool ledState = false;
@@ -71,7 +70,7 @@ void setup() {
   Wire.begin(D2, D1);
   Wire.setClock(100000); // 100 kHz standard clock
 
-  // 4. Probe & Initialize OLED Display
+  // 4. Probe & Initialize OLED Display (Non-blocking)
   if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C) || display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
     oledOK = true;
     display.clearDisplay();
@@ -107,7 +106,6 @@ void loop() {
   // ==========================================================
   if (now - lastSend >= 1000) {
     lastSend = now;
-    stepCounter++;
 
     // 1. Simulate Smooth Heart Rate (Range: 72 - 86 BPM)
     currentHR += random(-2, 3);

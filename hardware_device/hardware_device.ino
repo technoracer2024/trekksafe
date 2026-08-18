@@ -7,7 +7,7 @@
 //   MPU6050 IMU:     SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14 - ESP RX), RX -> D6 (GPIO 12 - ESP TX), VCC -> Vin (5V), GND -> GND
 //   Passive Buzzer:  Signal (+) -> D8 (GPIO 15), Ground (-) -> GND
-//   4-Pin Button:    Pin 1 -> D7 (GPIO 13), Pin 2 (opposite) -> GND (Uses internal INPUT_PULLUP)
+//   4-Pin Button:    Pin 1 -> D7 (GPIO 13), Pin 3 (opposite) -> GND (Uses internal INPUT_PULLUP)
 //   On-board LED:    D4 (GPIO 2 - Blinks on live packet)
 // ============================================================
 
@@ -47,7 +47,7 @@ int currentSpO2 = 98;
 int battery = 96;
 String motion = "Walking";
 
-// Faridabad Base Coordinates
+// Faridabad Base Coordinates (High Accuracy Wi-Fi Positioning)
 const float STATIC_FARIDABAD_LAT = 28.40890;
 const float STATIC_FARIDABAD_LON = 77.31780;
 
@@ -166,7 +166,7 @@ void checkGPS() {
     }
   }
 
-  // If no GPS satellite sentence for > 6 seconds, revert to static Faridabad coordinates
+  // If no GPS satellite sentence for > 6 seconds, revert to Faridabad Wi-Fi coordinates
   if (gpsFix && (millis() - lastGpsSentenceTime > 6000)) {
     gpsFix = false;
     currentLat = STATIC_FARIDABAD_LAT;

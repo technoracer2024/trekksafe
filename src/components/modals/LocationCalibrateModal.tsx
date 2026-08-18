@@ -20,6 +20,7 @@ export default function LocationCalibrateModal({ isOpen, onClose }: LocationCali
   if (!isOpen) return null;
 
   const checkpoints = [
+    { name: 'Faridabad Home Lab (Your Location)', lat: 28.4089, lon: 77.3178, alt: '215 m' },
     { name: 'Katra Base Camp (Start)', lat: 32.9922, lon: 74.9315, alt: '754 m' },
     { name: 'Banganga Checkpoint / HC-1', lat: 33.0035, lon: 74.9405, alt: '920 m' },
     { name: 'Charan Paduka Shrine', lat: 33.0105, lon: 74.9440, alt: '1,050 m' },

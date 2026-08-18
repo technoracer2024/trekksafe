@@ -21,7 +21,7 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
-SoftwareSerial gpsSerial(D5, D6); // D5=RX, D6=TX
+SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
 #define PULSE_PIN D3
 
@@ -35,8 +35,9 @@ int currentSpO2 = 98;
 int battery = 96;
 String motion = "Stationary";
 
-float currentLat = 33.0185; // Vaishno Devi Trail
-float currentLon = 74.9490;
+// Faridabad Default Coordinates (Auto-updates when GPS locks satellites)
+float currentLat = 28.4089;
+float currentLon = 77.3178;
 
 // Pulse sensor tracking
 int lastPinState = LOW;
@@ -97,13 +98,13 @@ void checkGPS() {
 }
 
 void setup() {
-  // 1. Initialize Serial at 115200 baud immediately
+  // 1. Initialize Serial FIRST at 115200 baud
   Serial.begin(115200);
-  delay(200);
+  delay(300);
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("     TREKSAFE TELEMETRY NODE BOOT       ");
+  Serial.println("   TREKSAFE TELEMETRY NODE (FARIDABAD)  ");
   Serial.println("========================================");
 
   // 2. Setup Inputs with Pullups
@@ -129,14 +130,16 @@ void setup() {
 
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(15, 12);
+    display.setCursor(15, 10);
     display.print("TrekSafe");
 
     display.setTextSize(1);
-    display.setCursor(20, 38);
-    display.print("Himalayan Node");
+    display.setCursor(20, 36);
+    display.print("Faridabad Node");
+    display.setCursor(20, 48);
+    display.print("GPS + Telemetry");
     display.display();
-    delay(1000);
+    delay(1200);
     Serial.println("✅ [OLED] Display ready at 0x3C/0x3D");
   } else {
     oledOK = false;
@@ -224,8 +227,8 @@ void loop() {
     display.setCursor(0, 0);
     display.print("TREKSAFE");
 
-    display.setCursor(68, 0);
-    display.print(gpsFix ? "GPS:LOCK" : "GPS:SCAN");
+    display.setCursor(66, 0);
+    display.print(gpsFix ? "GPS:LOCK" : "FARIDABAD");
 
     // Heart Pulse Indicator Dot
     display.setCursor(120, 0);
@@ -260,12 +263,12 @@ void loop() {
     // Footer: Motion / GPS coordinates
     display.setCursor(0, 55);
     display.setTextSize(1);
-    display.print("MOT: ");
+    display.print("MOT:");
     display.print(motion.substring(0, 4));
     display.print(" ");
-    display.print(String(currentLat, 2));
+    display.print(String(currentLat, 3));
     display.print(",");
-    display.print(String(currentLon, 2));
+    display.print(String(currentLon, 3));
 
     display.display();
   }

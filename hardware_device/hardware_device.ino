@@ -1,10 +1,12 @@
 // ============================================================
 // TrekSafe Telemetry Firmware (ESP8266 + OLED + Pulse + MPU6050 + GPS)
 //
-// Wiring:
-//   OLED & MPU6050: SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
-//   Pulse Sensor:   Signal -> D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
-//   GPS Module:     TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
+// Wiring Guide:
+//   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
+//   MPU6050:         SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
+//   Pulse Sensor:    Signal -> A0 (Analog) or D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
+//   GPS Module:      TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
+//   Built-in LED:    D4 / GPIO 2 (Blinks with live heartbeat)
 // ============================================================
 
 #include <Wire.h>
@@ -23,7 +25,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
-#define PULSE_PIN D3
+#define PULSE_PIN_DIGITAL D3
+#define PULSE_PIN_ANALOG A0
+#define ONBOARD_LED LED_BUILTIN // NodeMCU Built-in Blue LED (GPIO 2 / D4)
 
 bool oledOK = false;
 bool mpuOK = false;
@@ -35,7 +39,7 @@ int currentSpO2 = 98;
 int battery = 96;
 String motion = "Stationary";
 
-// Faridabad Default Coordinates (Auto-updates when GPS locks satellites)
+// Faridabad Default Coordinates (Auto-updates when GPS acquires satellites)
 float currentLat = 28.4089;
 float currentLon = 77.3178;
 
@@ -52,8 +56,9 @@ unsigned long lastOLED = 0;
 unsigned long lastVitals = 0;
 unsigned long frameCount = 0;
 bool heartBeatIcon = false;
+bool ledState = false;
 
-// Fast I2C Bus Scanner
+// I2C Probe Helper
 bool checkI2C(uint8_t addr) {
   Wire.beginTransmission(addr);
   return (Wire.endTransmission() == 0);
@@ -98,36 +103,39 @@ void checkGPS() {
 }
 
 void setup() {
-  // 1. Initialize Serial FIRST at 115200 baud
+  // 1. Configure On-board LED immediately
+  pinMode(ONBOARD_LED, OUTPUT);
+  digitalWrite(ONBOARD_LED, LOW); // Turn LED ON (Active LOW on ESP8266)
+
+  // 2. Initialize Serial FIRST at 115200 baud
   Serial.begin(115200);
-  delay(300);
+  delay(200);
 
   Serial.println();
   Serial.println("========================================");
   Serial.println("   TREKSAFE TELEMETRY NODE (FARIDABAD)  ");
   Serial.println("========================================");
 
-  // 2. Setup Inputs with Pullups
-  pinMode(PULSE_PIN, INPUT_PULLUP);
+  // 3. Setup Pulse Sensor Inputs
+  pinMode(PULSE_PIN_DIGITAL, INPUT_PULLUP);
   pinMode(D5, INPUT_PULLUP); // GPS RX
 
-  // 3. Initialize GPS
+  // 4. Initialize GPS Software UART
   gpsSerial.begin(9600);
 
-  // 4. Initialize I2C Bus for ESP8266 (D2=SDA, D1=SCL)
+  // 5. Initialize I2C Bus for ESP8266 (D2=SDA, D1=SCL)
   Wire.begin(D2, D1);
-  Wire.setClock(100000); // 100 kHz standard stable clock
+  Wire.setClock(100000); // 100 kHz standard clock
 
-  // 5. Initialize SSD1306 OLED
+  // 6. Safe OLED Initialization (Try 0x3C and 0x3D)
   uint8_t oledAddr = 0x3C;
   if (checkI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
   else if (checkI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
 
+  // Attempt OLED begin
   if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
     display.clearDisplay();
-    display.display();
-    delay(50);
-
+    display.dim(false); // Maximum brightness
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
     display.setCursor(15, 10);
@@ -139,14 +147,26 @@ void setup() {
     display.setCursor(20, 48);
     display.print("GPS + Telemetry");
     display.display();
-    delay(1200);
+    delay(1000);
     Serial.println("✅ [OLED] Display ready at 0x3C/0x3D");
   } else {
-    oledOK = false;
-    Serial.println("⚠️ [OLED] Display not detected on I2C");
+    // If not detected via checkI2C, attempt direct begin
+    if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+      oledOK = true;
+      display.clearDisplay();
+      display.setTextColor(SSD1306_WHITE);
+      display.setTextSize(2);
+      display.setCursor(15, 10);
+      display.print("TrekSafe");
+      display.display();
+      Serial.println("✅ [OLED] Display started on 0x3C");
+    } else {
+      oledOK = false;
+      Serial.println("⚠️ [OLED] Not detected on I2C (check D2=SDA, D1=SCL)");
+    }
   }
 
-  // 6. Initialize MPU6050
+  // 7. Initialize MPU6050
   if (mpu.begin()) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
@@ -156,6 +176,7 @@ void setup() {
     Serial.println("⚠️ [MPU6050] Accelerometer not detected");
   }
 
+  digitalWrite(ONBOARD_LED, HIGH); // Turn LED OFF after boot
   Serial.println("🚀 Node ready! Telemetry streaming now...");
   Serial.println("========================================");
 }
@@ -164,9 +185,12 @@ void loop() {
   // 1. Process GPS Data (Non-blocking)
   checkGPS();
 
-  // 2. Read Pulse Sensor on D3
-  int rawPulse = digitalRead(PULSE_PIN);
-  if (rawPulse == HIGH && lastPinState == LOW) {
+  // 2. Read Pulse Sensor (Supports Digital D3 or Analog A0)
+  int rawDigital = digitalRead(PULSE_PIN_DIGITAL);
+  int rawAnalog = analogRead(PULSE_PIN_ANALOG);
+  bool pulseDetected = (rawDigital == HIGH) || (rawAnalog > 560);
+
+  if (pulseDetected && lastPinState == LOW) {
     unsigned long now = millis();
     unsigned long delta = now - lastBeatTime;
     if (delta > 320 && delta < 1400) {
@@ -179,11 +203,16 @@ void loop() {
       currentHR = sum / RATE_SIZE;
       currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 95, 99);
       heartBeatIcon = true;
+
+      // Pulse LED briefly on real heartbeat
+      digitalWrite(ONBOARD_LED, LOW);
     } else if (lastBeatTime == 0 || delta >= 1400) {
       lastBeatTime = now;
     }
+  } else {
+    digitalWrite(ONBOARD_LED, HIGH);
   }
-  lastPinState = rawPulse;
+  lastPinState = pulseDetected ? HIGH : LOW;
 
   // 3. Dynamic Physiological Drift if idle for > 2.5s (Keeps vitals realistic & active)
   if (millis() - lastBeatTime > 2500) {
@@ -195,6 +224,10 @@ void loop() {
       currentSpO2 += random(-1, 2);
       currentSpO2 = constrain(currentSpO2, 96, 99);
       heartBeatIcon = !heartBeatIcon; // Toggle pulse indicator
+      
+      // Blink LED every second to show alive state
+      ledState = !ledState;
+      digitalWrite(ONBOARD_LED, ledState ? LOW : HIGH);
     }
   }
 

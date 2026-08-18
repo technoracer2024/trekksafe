@@ -117,34 +117,48 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
       let buffer = '';
 
       while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          buffer += value;
-          setRawBufferCount(prev => prev + value.length);
+        try {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            buffer += value;
+            setRawBufferCount(prev => prev + value.length);
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-          for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line) continue;
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line) continue;
 
-            // Add to terminal display
-            setSerialLogs(prev => [...prev.slice(-40), line]);
+              // Add to terminal display
+              setSerialLogs(prev => [...prev.slice(-40), line]);
 
-            // Attempt smart parsing
-            const parsed = parseSerialLine(line);
-            if (parsed) {
-              setLastParsed(parsed);
-              applyHardwarePayload(parsed);
+              // Attempt smart parsing
+              const parsed = parseSerialLine(line);
+              if (parsed) {
+                setLastParsed(parsed);
+                applyHardwarePayload(parsed);
+              }
             }
           }
+        } catch (streamErr: any) {
+          // Framing or transient read error - notify with clear fix
+          const isFraming = streamErr.message?.toLowerCase().includes('framing') || streamErr.name === 'FramingError';
+          if (isFraming) {
+            showToast(`⚠️ Framing Error: Check if Arduino Serial.begin(...) baud matches ${baudRate}`);
+          }
+          break;
         }
       }
     } catch (err: any) {
       setIsReading(false);
-      showToast(`⚠️ Serial notice: ${err.message}`);
+      const isFraming = err.message?.toLowerCase().includes('framing');
+      if (isFraming) {
+        showToast(`⚠️ Framing Error: Your code may be using Serial.begin(9600). Try selecting 9600 baud.`);
+      } else {
+        showToast(`⚠️ Serial notice: ${err.message}`);
+      }
     }
   };
 

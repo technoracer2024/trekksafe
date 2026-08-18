@@ -124,19 +124,31 @@ void setup() {
   // 4. Initialize GPS Software UART
   gpsSerial.begin(9600);
 
-  // 5. Initialize I2C Bus with YOUR EXACT PINS: SDA=D1, SCL=D2
-  Wire.begin(D1, D2);
-  Wire.setClock(100000); // 100 kHz standard clock
-  Serial.println("✅ [I2C] Initialized with SDA=D1 (GPIO 5), SCL=D2 (GPIO 4)");
+  // 5. Initialize I2C Bus: SDA=D2 (GPIO 4), SCL=D1 (GPIO 5)
+  Wire.begin(D2, D1);
+  Wire.setClock(100000); // 100 kHz standard stable clock
+  Serial.println("🔍 [I2C] Scanning bus on SDA=D2 (GPIO 4), SCL=D1 (GPIO 5)...");
 
-  // 6. Safe OLED Initialization (Try 0x3C and 0x3D on SDA=D1, SCL=D2)
-  uint8_t oledAddr = 0x3C;
-  if (checkI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
-  else if (checkI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
+  // I2C Full Bus Scanner
+  uint8_t foundOLED = 0;
+  uint8_t foundMPU = 0;
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("  -> Found I2C device at 0x");
+      if (addr < 16) Serial.print("0");
+      Serial.println(addr, HEX);
+      if (addr == 0x3C || addr == 0x3D) foundOLED = addr;
+      if (addr == 0x68 || addr == 0x69) foundMPU = addr;
+    }
+  }
 
-  if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
+  // 6. Safe OLED Initialization
+  if (foundOLED == 0) foundOLED = 0x3C; // Default fallback
+  if (display.begin(SSD1306_SWITCHCAPVCC, foundOLED)) {
+    oledOK = true;
     display.clearDisplay();
-    display.dim(false); // Maximum brightness
+    display.dim(false); // Max brightness
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
     display.setCursor(15, 10);
@@ -149,31 +161,22 @@ void setup() {
     display.print("GPS + Telemetry");
     display.display();
     delay(1000);
-    Serial.println("✅ [OLED] Display ready at 0x3C/0x3D");
+    Serial.println("✅ [OLED] Display initialized OK");
   } else {
-    if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-      oledOK = true;
-      display.clearDisplay();
-      display.setTextColor(SSD1306_WHITE);
-      display.setTextSize(2);
-      display.setCursor(15, 10);
-      display.print("TrekSafe");
-      display.display();
-      Serial.println("✅ [OLED] Display started on 0x3C");
-    } else {
-      oledOK = false;
-      Serial.println("⚠️ [OLED] Display not detected on I2C (check D1=SDA, D2=SCL)");
-    }
+    oledOK = false;
+    Serial.println("⚠️ [OLED] Display not responding (check D2=SDA, D1=SCL & VCC/GND)");
   }
 
-  // 7. Initialize MPU6050 on SDA=D1, SCL=D2
-  if (mpu.begin(0x68, &Wire) || mpu.begin(0x69, &Wire) || mpu.begin()) {
+  // 7. Initialize MPU6050
+  if (foundMPU == 0) foundMPU = 0x68; // Default fallback
+  if (mpu.begin(foundMPU, &Wire) || mpu.begin()) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    Serial.println("✅ [MPU6050] Accelerometer OK on SDA=D1, SCL=D2");
+    Serial.println("✅ [MPU6050] Accelerometer OK");
   } else {
-    Serial.println("⚠️ [MPU6050] Accelerometer not detected (check D1=SDA, D2=SCL)");
+    mpuOK = false;
+    Serial.println("⚠️ [MPU6050] Accelerometer not responding");
   }
 
   digitalWrite(ONBOARD_LED, HIGH); // Turn LED OFF after boot

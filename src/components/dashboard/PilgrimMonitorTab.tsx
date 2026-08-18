@@ -233,7 +233,7 @@ export default function PilgrimMonitorTab() {
               <span className="text-[9px] font-mono">BPM</span>
             </div>
             <div className={`text-3xl font-extrabold font-serif leading-none ${hrColor}`}>
-              {selected?.hr || '--'}
+              {selected?.isLiveHw && (!selected.hr || selected.hr === 0) ? '--' : (selected?.hr || '--')}
             </div>
             {/* Animated ECG Waveform */}
             <div className="w-full h-6 overflow-hidden my-1 bg-cyan-500/5 dark:bg-cyan-500/10 rounded">
@@ -245,7 +245,7 @@ export default function PilgrimMonitorTab() {
               </svg>
             </div>
             <div className="text-[10px] text-slate-400 truncate">
-              {selected?.isUser ? (selected.isLiveHw ? 'ESP8266 Live Pulse' : 'Your Live Vitals') : `Age ${selected?.age} · ${selected?.medicalCondition}`}
+              {selected?.isUser ? (selected.isLiveHw ? (selected.hr === 0 ? '👉 Place finger on MAX30102 sensor' : '⚡ ESP8266 Live Pulse') : 'Your Live Vitals') : `Age ${selected?.age} · ${selected?.medicalCondition}`}
             </div>
           </div>
 
@@ -256,7 +256,7 @@ export default function PilgrimMonitorTab() {
               <span className="text-[9px] font-mono">% SpO₂</span>
             </div>
             <div className={`text-3xl font-extrabold font-serif leading-none ${spo2Color}`}>
-              {selected?.spo2 ? `${selected.spo2}%` : '--'}
+              {selected?.isLiveHw && (!selected.spo2 || selected.spo2 === 0) ? '--' : (selected?.spo2 ? `${selected.spo2}%` : '--')}
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden my-3">
               <div
@@ -267,7 +267,7 @@ export default function PilgrimMonitorTab() {
               />
             </div>
             <div className="text-[10px] text-slate-400 truncate">
-              {(selected?.spo2 || 0) < 90 ? '⚠️ Severe Hypoxia Warning' : (selected?.spo2 || 0) < 94 ? 'Elevated Pulse · Oxygen Moderate' : 'Normal Respiration'}
+              {selected?.isLiveHw && (!selected.spo2 || selected.spo2 === 0) ? 'Sensor standby · Touch optical glass' : (selected?.spo2 || 0) < 90 ? '⚠️ Severe Hypoxia Warning' : (selected?.spo2 || 0) < 94 ? 'Elevated Pulse · Oxygen Moderate' : 'Normal Respiration'}
             </div>
           </div>
 

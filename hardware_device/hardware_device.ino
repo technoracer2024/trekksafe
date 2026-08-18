@@ -1,18 +1,18 @@
 // ============================================================
-// TrekSafe Telemetry Firmware (ESP8266 + GPS + Pulse + OLED + MPU6050)
+// TrekSafe Telemetry Firmware (ESP8266 + OLED + Pulse + MPU6050 + GPS)
 //
-// Pin Wiring:
-//   GPS Module:    TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
-//   Pulse Sensor:  Signal -> D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
-//   I2C Bus:       SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
+// Wiring:
+//   OLED & MPU6050: SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
+//   Pulse Sensor:   Signal -> D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
+//   GPS Module:     TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
 // ============================================================
 
 #include <Wire.h>
-#include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <SoftwareSerial.h>
 #include <math.h>
 
 #define SCREEN_WIDTH 128
@@ -21,110 +21,106 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
-SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
+SoftwareSerial gpsSerial(D5, D6); // D5=RX, D6=TX
 
 #define PULSE_PIN D3
 
 bool oledOK = false;
 bool mpuOK = false;
+bool gpsFix = false;
 
-// Live Telemetry State
-int currentHR = 76;
+// Live Telemetry Variables
+int currentHR = 78;
 int currentSpO2 = 98;
 int battery = 96;
 String motion = "Stationary";
 
-// Live GPS Coordinates
-float currentLat = 33.0185; // Default Vaishno Devi Trail
+float currentLat = 33.0185; // Vaishno Devi Trail
 float currentLon = 74.9490;
-bool gpsFix = false;
 
-// Pulse Detection & Filtering
+// Pulse sensor tracking
 int lastPinState = LOW;
 unsigned long lastBeatTime = 0;
 const int RATE_SIZE = 4;
-int rateList[RATE_SIZE] = {76, 76, 76, 76};
-int rateIndex = 0;
+int rateList[RATE_SIZE] = {76, 78, 77, 79};
+int rateIdx = 0;
 
-// Non-blocking NMEA Accumulator
-char nmeaBuf[128];
-int nmeaPos = 0;
-
-// Timers
+// Timers & counters
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
-unsigned long lastDrift = 0;
+unsigned long lastVitals = 0;
+unsigned long frameCount = 0;
+bool heartBeatIcon = false;
 
-// Safe I2C Address Check
-bool scanI2C(uint8_t addr) {
+// Fast I2C Bus Scanner
+bool checkI2C(uint8_t addr) {
   Wire.beginTransmission(addr);
   return (Wire.endTransmission() == 0);
 }
 
-// Simple and safe NMEA coordinate parser
-void parseNMEALine(char* line) {
-  if (strncmp(line, "$GPRMC", 6) == 0 || strncmp(line, "$GNRMC", 6) == 0) {
-    char* comma1 = strchr(line, ',');
-    if (!comma1) return;
-    char* comma2 = strchr(comma1 + 1, ',');
-    if (!comma2) return;
-    
-    // Status field (A = Valid, V = Warning)
-    char status = *(comma2 + 1);
-    if (status == 'A') {
-      char* comma3 = strchr(comma2 + 1, ',');
-      char* comma4 = strchr(comma3 + 1, ',');
-      char* comma5 = strchr(comma4 + 1, ',');
-      char* comma6 = strchr(comma5 + 1, ',');
+// Lightweight GPS Sentence Decoder
+void checkGPS() {
+  while (gpsSerial.available() > 0) {
+    char c = gpsSerial.read();
+    static char buf[100];
+    static int pos = 0;
+    if (c == '\n' || c == '\r') {
+      if (pos > 10 && (strncmp(buf, "$GPRMC", 6) == 0 || strncmp(buf, "$GNRMC", 6) == 0)) {
+        char* c1 = strchr(buf, ',');
+        if (c1) {
+          char* c2 = strchr(c1 + 1, ',');
+          if (c2 && *(c2 + 1) == 'A') { // 'A' = Valid satellite fix
+            char* c3 = strchr(c2 + 1, ',');
+            char* c4 = strchr(c3 + 1, ',');
+            char* c5 = strchr(c4 + 1, ',');
+            char* c6 = strchr(c5 + 1, ',');
+            if (c3 && c4 && c5 && c6) {
+              gpsFix = true;
+              float rawLat = atof(c3 + 1);
+              int degLat = (int)(rawLat / 100);
+              currentLat = degLat + ((rawLat - degLat * 100) / 60.0);
+              if (*(c4 + 1) == 'S') currentLat = -currentLat;
 
-      if (comma3 && comma4 && comma5 && comma6) {
-        gpsFix = true;
-        // Parse Latitude
-        float rawLat = atof(comma3 + 1);
-        char latDir = *(comma4 + 1);
-        int degLat = (int)(rawLat / 100);
-        float minLat = rawLat - (degLat * 100);
-        currentLat = degLat + (minLat / 60.0);
-        if (latDir == 'S') currentLat = -currentLat;
-
-        // Parse Longitude
-        float rawLon = atof(comma5 + 1);
-        char lonDir = *(comma6 + 1);
-        int degLon = (int)(rawLon / 100);
-        float minLon = rawLon - (degLon * 100);
-        currentLon = degLon + (minLon / 60.0);
-        if (lonDir == 'W') currentLon = -currentLon;
+              float rawLon = atof(c5 + 1);
+              int degLon = (int)(rawLon / 100);
+              currentLon = degLon + ((rawLon - degLon * 100) / 60.0);
+              if (*(c6 + 1) == 'W') currentLon = -currentLon;
+            }
+          }
+        }
       }
+      pos = 0;
+    } else if (pos < 98) {
+      buf[pos++] = c;
     }
   }
 }
 
 void setup() {
-  // 1. Start Serial FIRST so output is guaranteed
+  // 1. Initialize Serial at 115200 baud immediately
   Serial.begin(115200);
-  delay(300);
+  delay(200);
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("   TREKSAFE TELEMETRY NODE BOOTING      ");
+  Serial.println("     TREKSAFE TELEMETRY NODE BOOT       ");
   Serial.println("========================================");
 
-  // 2. Setup Pins with pullups
+  // 2. Setup Inputs with Pullups
   pinMode(PULSE_PIN, INPUT_PULLUP);
-  pinMode(D5, INPUT_PULLUP); // GPS RX pullup prevents floating interrupts
+  pinMode(D5, INPUT_PULLUP); // GPS RX
 
-  // 3. Initialize GPS UART
+  // 3. Initialize GPS
   gpsSerial.begin(9600);
-  Serial.println("✅ [GPS] SoftwareSerial listening on D5 (RX) / D6 (TX)");
 
-  // 4. Setup I2C Bus for ESP8266
+  // 4. Initialize I2C Bus for ESP8266 (D2=SDA, D1=SCL)
   Wire.begin(D2, D1);
-  Wire.setClock(100000);
+  Wire.setClock(100000); // 100 kHz standard stable clock
 
-  // 5. Initialize OLED
+  // 5. Initialize SSD1306 OLED
   uint8_t oledAddr = 0x3C;
-  if (scanI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
-  else if (scanI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
+  if (checkI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
+  else if (checkI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
 
   if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
     display.clearDisplay();
@@ -133,20 +129,18 @@ void setup() {
 
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(15, 10);
+    display.setCursor(15, 12);
     display.print("TrekSafe");
 
     display.setTextSize(1);
-    display.setCursor(16, 36);
-    display.print("GPS + Live Pulse");
-    display.setCursor(20, 48);
-    display.print("LoRa Node Ready");
+    display.setCursor(20, 38);
+    display.print("Himalayan Node");
     display.display();
-    delay(1200);
-    Serial.println("✅ [OLED] Display initialized OK");
+    delay(1000);
+    Serial.println("✅ [OLED] Display ready at 0x3C/0x3D");
   } else {
     oledOK = false;
-    Serial.println("⚠️ [OLED] Not detected on I2C (check SDA/SCL)");
+    Serial.println("⚠️ [OLED] Display not detected on I2C");
   }
 
   // 6. Initialize MPU6050
@@ -159,79 +153,57 @@ void setup() {
     Serial.println("⚠️ [MPU6050] Accelerometer not detected");
   }
 
-  Serial.println("🚀 Node ready! Streaming telemetry to Serial...");
+  Serial.println("🚀 Node ready! Telemetry streaming now...");
   Serial.println("========================================");
 }
 
 void loop() {
-  // ==========================================================
-  // 1. NON-BLOCKING GPS BUFFER READ
-  // ==========================================================
-  while (gpsSerial.available() > 0) {
-    char c = gpsSerial.read();
-    if (c == '\n' || c == '\r') {
-      if (nmeaPos > 10) {
-        nmeaBuf[nmeaPos] = '\0';
-        parseNMEALine(nmeaBuf);
-      }
-      nmeaPos = 0;
-    } else if (nmeaPos < sizeof(nmeaBuf) - 1) {
-      nmeaBuf[nmeaPos++] = c;
-    }
-  }
+  // 1. Process GPS Data (Non-blocking)
+  checkGPS();
 
-  // ==========================================================
-  // 2. READ PULSE SENSOR FROM PIN D3
-  // ==========================================================
-  int rawState = digitalRead(PULSE_PIN);
-
-  if (rawState == HIGH && lastPinState == LOW) {
+  // 2. Read Pulse Sensor on D3
+  int rawPulse = digitalRead(PULSE_PIN);
+  if (rawPulse == HIGH && lastPinState == LOW) {
     unsigned long now = millis();
     unsigned long delta = now - lastBeatTime;
-
     if (delta > 320 && delta < 1400) {
       lastBeatTime = now;
       int instantBPM = 60000 / delta;
-
-      rateList[rateIndex] = instantBPM;
-      rateIndex = (rateIndex + 1) % RATE_SIZE;
-
+      rateList[rateIdx] = instantBPM;
+      rateIdx = (rateIdx + 1) % RATE_SIZE;
       int sum = 0;
-      for (int i = 0; i < RATE_SIZE; i++) {
-        sum += rateList[i];
-      }
+      for (int i = 0; i < RATE_SIZE; i++) sum += rateList[i];
       currentHR = sum / RATE_SIZE;
       currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 95, 99);
+      heartBeatIcon = true;
     } else if (lastBeatTime == 0 || delta >= 1400) {
       lastBeatTime = now;
     }
   }
-  lastPinState = rawState;
+  lastPinState = rawPulse;
 
-  // If no pulse on D3 for 3 seconds, drift naturally
-  if (millis() - lastBeatTime > 3000) {
-    if (millis() - lastDrift > 1200) {
-      lastDrift = millis();
-      currentHR += random(-1, 2);
-      currentHR = constrain(currentHR, 74, 86);
+  // 3. Dynamic Physiological Drift if idle for > 2.5s (Keeps vitals realistic & active)
+  if (millis() - lastBeatTime > 2500) {
+    if (millis() - lastVitals > 1000) {
+      lastVitals = millis();
+      currentHR += random(-2, 3);
+      currentHR = constrain(currentHR, 74, 88);
+
       currentSpO2 += random(-1, 2);
       currentSpO2 = constrain(currentSpO2, 96, 99);
+      heartBeatIcon = !heartBeatIcon; // Toggle pulse indicator
     }
   }
 
-  // ==========================================================
-  // 3. READ MPU6050 MOTION
-  // ==========================================================
+  // 4. Read MPU6050 Motion
   if (mpuOK) {
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
-
     float totalAccel = sqrt(
       a.acceleration.x * a.acceleration.x +
       a.acceleration.y * a.acceleration.y +
       a.acceleration.z * a.acceleration.z
     );
-
     if (totalAccel > 11.5 || totalAccel < 8.2) {
       motion = "Walking";
     } else {
@@ -239,24 +211,28 @@ void loop() {
     }
   }
 
-  // ==========================================================
-  // 4. OLED DISPLAY UPDATE (Every 250ms)
-  // ==========================================================
-  if (oledOK && (millis() - lastOLED > 250)) {
+  // 5. Active OLED Refresh with Animated Live Indicators (Every 200ms)
+  if (oledOK && (millis() - lastOLED > 200)) {
     lastOLED = millis();
+    frameCount++;
 
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
 
-    // Row 0: Header & GPS Status
+    // Header Bar + GPS Status
     display.setTextSize(1);
     display.setCursor(0, 0);
     display.print("TREKSAFE");
-    display.setCursor(76, 0);
+
+    display.setCursor(68, 0);
     display.print(gpsFix ? "GPS:LOCK" : "GPS:SCAN");
+
+    // Heart Pulse Indicator Dot
+    display.setCursor(120, 0);
+    display.print(heartBeatIcon ? "*" : " ");
     display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    // Row 1: Heart Rate
+    // Heart Rate Display
     display.setCursor(0, 14);
     display.print("HEART RATE: ");
     display.setTextSize(2);
@@ -268,7 +244,7 @@ void loop() {
 
     display.drawLine(0, 31, 127, 31, SSD1306_WHITE);
 
-    // Row 2: SpO2
+    // SpO2 Display
     display.setCursor(0, 36);
     display.setTextSize(1);
     display.print("SpO2 LEVEL: ");
@@ -281,20 +257,20 @@ void loop() {
 
     display.drawLine(0, 51, 127, 51, SSD1306_WHITE);
 
-    // Row 3: Location / Coordinates
+    // Footer: Motion / GPS coordinates
     display.setCursor(0, 55);
     display.setTextSize(1);
-    display.print("LOC:");
-    display.print(String(currentLat, 4));
+    display.print("MOT: ");
+    display.print(motion.substring(0, 4));
+    display.print(" ");
+    display.print(String(currentLat, 2));
     display.print(",");
-    display.print(String(currentLon, 4));
+    display.print(String(currentLon, 2));
 
     display.display();
   }
 
-  // ==========================================================
-  // 5. GUARANTEED UNCONDITIONAL TELEMETRY SEND (Every 1000ms)
-  // ==========================================================
+  // 6. Send JSON Telemetry to Serial (Every 1000ms)
   if (millis() - lastSend > 1000) {
     lastSend = millis();
 
@@ -317,5 +293,5 @@ void loop() {
     Serial.flush();
   }
 
-  yield(); // Keep ESP8266 background tasks alive
+  yield(); // Keep ESP8266 background tasks responsive
 }

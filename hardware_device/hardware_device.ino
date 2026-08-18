@@ -7,14 +7,6 @@
 //   SCL -> D1 (GPIO 5)
 //   VCC -> 3V3
 //   GND -> GND
-//
-// Features:
-//   - Simulates realistic Heart Rate (72 - 86 BPM)
-//   - Simulates realistic SpO2 (96% - 99%)
-//   - Simulates realistic Motion ("Walking" / "Stationary")
-//   - Simulates live GPS trail in Faridabad (28.40890° N, 77.31780° E)
-//   - Synchronizes identical values to OLED Screen & USB Serial Monitor
-//   - Blinks on-board blue LED with each live telemetry packet
 // ============================================================
 
 #include <Wire.h>

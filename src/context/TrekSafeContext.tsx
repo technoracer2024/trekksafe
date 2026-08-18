@@ -360,51 +360,73 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
   }, [showToast]);
 
   const applyHardwarePayload = useCallback((p: any) => {
-    let updatedTrekker: Trekker | null = null;
+    const hr = p.hr !== undefined ? parseInt(p.hr) : 76;
+    const spo2 = p.spo2 !== undefined ? parseInt(p.spo2) : 98;
+    let cleanMotion = p.mot !== undefined ? String(p.mot) : 'Walking';
+    if (cleanMotion.includes('FALL')) cleanMotion = 'Motion Active (IMU)';
+    const lat = p.lat !== undefined ? parseFloat(p.lat) : undefined;
+    const lon = p.lon !== undefined ? parseFloat(p.lon) : undefined;
+    const batt = p.batt !== undefined ? parseInt(p.batt) : 96;
 
     setTrekkers(prev => prev.map(t => {
       if (t.id === 0) {
-        const hr = p.hr !== undefined ? parseInt(p.hr) : t.hr;
-        const spo2 = p.spo2 !== undefined ? parseInt(p.spo2) : t.spo2;
-        
-        // Clean motion state without triggering emergency fall on physical device
-        let cleanMotion = p.mot !== undefined ? p.mot : t.movement;
-        if (cleanMotion && cleanMotion.includes('FALL')) {
-          cleanMotion = 'Motion Active (IMU)';
-        }
-
-        const lat = p.lat !== undefined ? parseFloat(p.lat) : t.lat;
-        const lon = p.lon !== undefined ? parseFloat(p.lon) : t.lon;
-
-        updatedTrekker = {
+        return {
           ...t,
           hr,
           spo2,
-          movement: cleanMotion || 'Stationary',
-          lat,
-          lon,
+          movement: cleanMotion,
+          lat: lat ?? t.lat,
+          lon: lon ?? t.lon,
           isLiveHw: true,
           status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
-          battery: p.batt !== undefined ? parseInt(p.batt) : t.battery
+          battery: batt,
+          gpsStatus: 'Live GPS (Serial Sync)'
         };
-
-        return updatedTrekker;
       }
       return t;
     }));
 
-    if (updatedTrekker) {
-      const uT: Trekker = updatedTrekker;
-      setSelectedTrekker(prev => (prev && prev.id === 0 ? uT : prev));
-      setVitalsHistory(prev => ({
-        hr: [...prev.hr.slice(1), uT.hr],
-        spo2: [...prev.spo2.slice(1), uT.spo2],
-        labels: [...prev.labels.slice(1), new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })]
-      }));
+    setSelectedTrekker(prev => {
+      if (!prev || prev.id === 0) {
+        return {
+          id: 0,
+          name: 'You (This Device)',
+          age: 'Self',
+          hr,
+          spo2,
+          movement: cleanMotion,
+          status: (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
+          lat: lat ?? (prev?.lat ?? 28.4089),
+          lon: lon ?? (prev?.lon ?? 77.3178),
+          isUser: true,
+          isLiveHw: true,
+          medicalCondition: 'None (Healthy)',
+          riskLevel: 'normal',
+          routeIndex: 0,
+          battery: batt,
+          gpsStatus: 'Live GPS (Serial Sync)'
+        };
+      }
+      return prev;
+    });
+
+    if (lat !== undefined && lon !== undefined) {
+      setUserLiveCoords({
+        lat,
+        lon,
+        accuracy: 3,
+        altitude: '215 m'
+      });
     }
 
+    setVitalsHistory(prev => ({
+      hr: [...prev.hr.slice(1), hr],
+      spo2: [...prev.spo2.slice(1), spo2],
+      labels: [...prev.labels.slice(1), new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })]
+    }));
+
     setHardwareConnected(true);
-  }, [triggerEmergency]);
+  }, []);
 
   const [isCalibrated, setIsCalibrated] = useState<boolean>(false);
 

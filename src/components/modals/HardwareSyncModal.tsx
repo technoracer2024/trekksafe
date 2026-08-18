@@ -121,51 +121,52 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
       setHardwareConnected(true);
       setIsReading(true);
 
-      const reader = port.readable.getReader();
       const decoder = new TextDecoder('utf-8', { fatal: false });
       let buffer = '';
 
-      while (true) {
+      while (port.readable) {
+        let reader;
         try {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) {
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
-            setRawBufferCount(prev => prev + chunk.length);
+          reader = port.readable.getReader();
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value) {
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
+              setRawBufferCount(prev => prev + chunk.length);
 
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
 
-            for (const rawLine of lines) {
-              const line = rawLine.trim();
-              if (!line) continue;
+              for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line) continue;
 
-              // Add to terminal display
-              setSerialLogs(prev => [...prev.slice(-40), line]);
+                // Add to terminal display
+                setSerialLogs(prev => [...prev.slice(-40), line]);
 
-              // Attempt smart parsing
-              const parsed = parseSerialLine(line);
-              if (parsed) {
-                setLastParsed(parsed);
-                applyHardwarePayload(parsed);
+                // Attempt smart parsing
+                const parsed = parseSerialLine(line);
+                if (parsed) {
+                  setLastParsed(parsed);
+                  applyHardwarePayload(parsed);
+                }
               }
             }
           }
         } catch (streamErr: any) {
-          console.warn('Transient serial read notice:', streamErr);
-          // Wait briefly and continue receiving subsequent packets
-          await new Promise(r => setTimeout(r, 100));
+          console.warn('Recovering Web Serial stream:', streamErr);
+        } finally {
+          if (reader) {
+            try { reader.releaseLock(); } catch (_) {}
+          }
         }
+        await new Promise(r => setTimeout(r, 100));
       }
     } catch (err: any) {
       setIsReading(false);
-      const isFraming = err.message?.toLowerCase().includes('framing');
-      if (isFraming) {
-        showToast(`⚠️ Framing Error: Your code may be using Serial.begin(9600). Try selecting 9600 baud.`);
-      } else {
-        showToast(`⚠️ Serial notice: ${err.message}`);
-      }
+      showToast(`⚠️ Serial notice: ${err.message}`);
     }
   };
 

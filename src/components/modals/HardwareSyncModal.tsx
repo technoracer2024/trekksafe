@@ -121,9 +121,8 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
       setHardwareConnected(true);
       setIsReading(true);
 
-      const textDecoder = new TextDecoderStream();
-      port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
+      const reader = port.readable.getReader();
+      const decoder = new TextDecoder('utf-8', { fatal: false });
       let buffer = '';
 
       while (true) {
@@ -131,8 +130,9 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
           const { value, done } = await reader.read();
           if (done) break;
           if (value) {
-            buffer += value;
-            setRawBufferCount(prev => prev + value.length);
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            setRawBufferCount(prev => prev + chunk.length);
 
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -153,12 +153,9 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
             }
           }
         } catch (streamErr: any) {
-          // Framing or transient read error - notify with clear fix
-          const isFraming = streamErr.message?.toLowerCase().includes('framing') || streamErr.name === 'FramingError';
-          if (isFraming) {
-            showToast(`⚠️ Framing Error: Check if Arduino Serial.begin(...) baud matches ${baudRate}`);
-          }
-          break;
+          console.warn('Transient serial read notice:', streamErr);
+          // Wait briefly and continue receiving subsequent packets
+          await new Promise(r => setTimeout(r, 100));
         }
       }
     } catch (err: any) {

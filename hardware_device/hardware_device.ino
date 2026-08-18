@@ -166,7 +166,7 @@ void checkGPS() {
     }
   }
 
-  // If no GPS satellite sentence for > 6 seconds, revert to Faridabad Wi-Fi coordinates
+  // If no GPS satellite sentence for > 6 seconds, revert to Faridabad coordinates
   if (gpsFix && (millis() - lastGpsSentenceTime > 6000)) {
     gpsFix = false;
     currentLat = STATIC_FARIDABAD_LAT;

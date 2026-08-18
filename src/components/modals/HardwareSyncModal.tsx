@@ -178,7 +178,7 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
   };
 
   const ARDUINO_CODE = `// ============================================================
-// TrekSafe Production Firmware (ESP8266 + SSD1306 OLED + MPU6050)
+// TrekSafe Real Sensor Firmware (ESP8266 + D3 Pulse Sensor + OLED + MPU6050)
 // Libraries: "Adafruit SSD1306", "Adafruit GFX", "Adafruit MPU6050"
 // ============================================================
 #include <Wire.h>
@@ -195,21 +195,30 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 
+const int PULSE_PIN = D3; // D3 = GPIO 0
+
 bool oledFound = false;
 bool mpuFound = false;
 
-int heartRate = 78;
-int spo2 = 98;
+int currentHR = 0;
+int currentSpO2 = 0;
 int battery = 96;
 String motion = "Stationary";
 
+int lastPinState = LOW;
+unsigned long lastBeatTime = 0;
+const int RATE_SIZE = 4;
+int rateList[RATE_SIZE] = {75, 75, 75, 75};
+int rateIndex = 0;
+
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
-unsigned long lastVitals = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(250);
+  delay(300);
+
+  pinMode(PULSE_PIN, INPUT_PULLUP);
   Wire.begin(4, 5); // SDA = D2, SCL = D1
   Wire.setClock(100000);
 
@@ -229,17 +238,47 @@ void setup() {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(16, 10);
+    display.setCursor(15, 12);
     display.print("TrekSafe");
     display.setTextSize(1);
-    display.setCursor(20, 36);
-    display.print("Himalayan Node");
+    display.setCursor(18, 38);
+    display.print("Pulse Node: D3");
     display.display();
-    delay(1500);
+    delay(1200);
   }
 }
 
 void loop() {
+  int rawPulse = digitalRead(PULSE_PIN);
+
+  if (rawPulse == HIGH && lastPinState == LOW) {
+    unsigned long now = millis();
+    unsigned long duration = now - lastBeatTime;
+
+    if (duration > 330 && duration < 1500) {
+      lastBeatTime = now;
+      int instantBPM = 60000 / duration;
+
+      rateList[rateIndex] = instantBPM;
+      rateIndex = (rateIndex + 1) % RATE_SIZE;
+
+      int sum = 0;
+      for (int i = 0; i < RATE_SIZE; i++) {
+        sum += rateList[i];
+      }
+      currentHR = sum / RATE_SIZE;
+      currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 94, 99);
+    } else if (lastBeatTime == 0) {
+      lastBeatTime = now;
+    }
+  }
+  lastPinState = rawPulse;
+
+  if (millis() - lastBeatTime > 2500) {
+    currentHR = 0;
+    currentSpO2 = 0;
+  }
+
   if (mpuFound) {
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
@@ -253,14 +292,6 @@ void loop() {
     }
   }
 
-  if (millis() - lastVitals > 1200) {
-    lastVitals = millis();
-    heartRate += random(-2, 3);
-    heartRate = constrain(heartRate, 74, 86);
-    spo2 += random(-1, 2);
-    spo2 = constrain(spo2, 96, 99);
-  }
-
   if (oledFound && (millis() - lastOLED > 250)) {
     lastOLED = millis();
     display.clearDisplay();
@@ -270,45 +301,45 @@ void loop() {
     display.setCursor(0, 0);
     display.print("TREKSAFE");
     display.setCursor(76, 0);
-    display.print("BAT:");
-    display.print(battery);
-    display.print("%");
-    display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
+    display.print("BAT:96%");
+    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
-    display.setCursor(0, 13);
+    display.setCursor(0, 15);
     display.setTextSize(1);
-    display.print("HEART RATE");
-    display.setCursor(0, 24);
-    display.setTextSize(2);
-    display.print(heartRate);
-    display.setTextSize(1);
-    display.setCursor(40, 31);
-    display.print("BPM");
+    display.print("HEART RATE: ");
+    if (currentHR > 0) {
+      display.setTextSize(2);
+      display.setCursor(70, 13);
+      display.print(currentHR);
+      display.setTextSize(1);
+      display.setCursor(108, 19);
+      display.print("BPM");
+    } else {
+      display.print("WAIT D3");
+    }
 
-    display.drawLine(78, 28, 86, 28, SSD1306_WHITE);
-    display.drawLine(86, 28, 89, 18, SSD1306_WHITE);
-    display.drawLine(89, 18, 93, 36, SSD1306_WHITE);
-    display.drawLine(93, 36, 97, 22, SSD1306_WHITE);
-    display.drawLine(97, 22, 100, 28, SSD1306_WHITE);
-    display.drawLine(100, 28, 127, 28, SSD1306_WHITE);
+    display.drawLine(0, 32, 127, 32, SSD1306_WHITE);
 
-    display.drawLine(0, 42, 127, 42, SSD1306_WHITE);
+    display.setCursor(0, 37);
+    display.setTextSize(1);
+    display.print("SpO2 LEVEL: ");
+    if (currentSpO2 > 0) {
+      display.setTextSize(2);
+      display.setCursor(70, 35);
+      display.print(currentSpO2);
+      display.setTextSize(1);
+      display.setCursor(100, 41);
+      display.print("%");
+    } else {
+      display.print("-- %");
+    }
 
-    display.setCursor(0, 47);
-    display.setTextSize(1);
-    display.print("SpO2: ");
-    display.setCursor(34, 45);
-    display.setTextSize(2);
-    display.print(spo2);
-    display.setCursor(62, 51);
-    display.setTextSize(1);
-    display.print("%");
+    display.drawLine(0, 52, 127, 52, SSD1306_WHITE);
 
-    display.setCursor(78, 45);
+    display.setCursor(0, 56);
     display.setTextSize(1);
-    display.print("MOT:");
-    display.setCursor(78, 54);
-    display.print(motion == "Walking" ? "WALK" : "REST");
+    display.print("STATUS: ");
+    display.print(motion);
 
     display.display();
   }
@@ -316,9 +347,9 @@ void loop() {
   if (millis() - lastSend > 1500) {
     lastSend = millis();
     Serial.print("{\\"hr\\":");
-    Serial.print(heartRate);
+    Serial.print(currentHR);
     Serial.print(",\\"spo2\\":");
-    Serial.print(spo2);
+    Serial.print(currentSpO2);
     Serial.print(",\\"mot\\":\\"");
     Serial.print(motion);
     Serial.print("\\",\\"fall\\":0");
@@ -326,6 +357,8 @@ void loop() {
     Serial.print(battery);
     Serial.println("}");
   }
+
+  yield();
 }`;
 
   const copyCode = () => {

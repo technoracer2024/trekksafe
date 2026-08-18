@@ -33,10 +33,6 @@
     font-family: 'Inter', system-ui, sans-serif;
     overflow-x: hidden;
   }
-
-  *, *::before, *::after {
-    cursor: none !important;
-  }
 }
 
 /* Custom Scrollbar */

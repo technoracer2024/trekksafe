@@ -56,11 +56,13 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
       } catch (e) {}
     }
 
-    // 2. Key-Value pairs (e.g., "HR: 84, SpO2: 97, Fall: 0" or "BPM=84 O2=98")
+    // 2. Key-Value pairs (e.g., "HR: 84, SpO2: 97, LAT: 33.0185, LON: 74.9490" or "BPM=84 O2=98")
     let hr: number | undefined;
     let spo2: number | undefined;
     let fall: number | undefined;
     let mot: string | undefined;
+    let lat: number | undefined;
+    let lon: number | undefined;
 
     const hrMatch = clean.match(/(?:hr|bpm|heart[\s_]*rate|pulse)[\s:=]+(\d+)/i);
     if (hrMatch) hr = parseInt(hrMatch[1]);
@@ -74,12 +76,20 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
     const motMatch = clean.match(/(?:mot|movement|motion|activity)[\s:=]+["']?([a-zA-Z\s]+)["']?/i);
     if (motMatch) mot = motMatch[1].trim();
 
-    if (hr !== undefined || spo2 !== undefined) {
+    const latMatch = clean.match(/(?:lat|latitude)[\s:=]+([-\d.]+)/i);
+    if (latMatch) lat = parseFloat(latMatch[1]);
+
+    const lonMatch = clean.match(/(?:lon|lng|longitude)[\s:=]+([-\d.]+)/i);
+    if (lonMatch) lon = parseFloat(lonMatch[1]);
+
+    if (hr !== undefined || spo2 !== undefined || lat !== undefined) {
       return {
         hr: hr ?? 75,
         spo2: spo2 ?? 98,
         mot: mot ?? (fall ? '⚠️ FALL DETECTED' : 'Walking'),
-        fall: fall ?? 0
+        fall: fall ?? 0,
+        lat,
+        lon
       };
     }
 
@@ -178,10 +188,16 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
   };
 
   const ARDUINO_CODE = `// ============================================================
-// TrekSafe Real Sensor Firmware (ESP8266 + D3 Pulse Sensor + OLED + MPU6050)
+// TrekSafe Telemetry Node (ESP8266 + GPS + D3 Pulse + OLED + MPU6050)
 // Libraries: "Adafruit SSD1306", "Adafruit GFX", "Adafruit MPU6050"
+//
+// Hardware Pinout:
+//   GPS Module:    TX -> D5, RX -> D6, VCC -> 3V3/5V, GND -> GND
+//   Pulse Sensor:  Signal -> D3, VCC -> 3V3/5V, GND -> GND
+//   I2C Bus:       SDA -> D2, SCL -> D1, VCC -> 3V3, GND -> GND
 // ============================================================
 #include <Wire.h>
+#include <SoftwareSerial.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_MPU6050.h>
@@ -194,105 +210,132 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
+SoftwareSerial gpsSerial(D5, D6); // D5=RX, D6=TX
 
-const int PULSE_PIN = D3; // D3 = GPIO 0
+#define PULSE_PIN D3
 
-bool oledFound = false;
-bool mpuFound = false;
+bool oledOK = false;
+bool mpuOK = false;
 
 int currentHR = 0;
 int currentSpO2 = 0;
 int battery = 96;
 String motion = "Stationary";
 
+float currentLat = 33.0185;
+float currentLon = 74.9490;
+bool gpsFix = false;
+
 int lastPinState = LOW;
 unsigned long lastBeatTime = 0;
 const int RATE_SIZE = 4;
-int rateList[RATE_SIZE] = {75, 75, 75, 75};
+int rateList[RATE_SIZE] = {76, 76, 76, 76};
 int rateIndex = 0;
 
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
 
+bool scanI2C(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return (Wire.endTransmission() == 0);
+}
+
+void parseNMEALine(String line) {
+  if (line.startsWith("$GPRMC") || line.startsWith("$GNRMC")) {
+    int commas[13];
+    int c = 0;
+    for (int i = 0; i < line.length() && c < 13; i++) {
+      if (line.charAt(i) == ',') commas[c++] = i;
+    }
+    if (c >= 7 && line.charAt(commas[1] + 1) == 'A') {
+      gpsFix = true;
+      String rawLat = line.substring(commas[2] + 1, commas[3]);
+      if (rawLat.length() > 4) {
+        float deg = rawLat.substring(0, 2).toFloat();
+        float min = rawLat.substring(2).toFloat();
+        currentLat = deg + (min / 60.0);
+        if (line.charAt(commas[3] + 1) == 'S') currentLat = -currentLat;
+      }
+      String rawLon = line.substring(commas[4] + 1, commas[5]);
+      if (rawLon.length() > 5) {
+        float deg = rawLon.substring(0, 3).toFloat();
+        float min = rawLon.substring(3).toFloat();
+        currentLon = deg + (min / 60.0);
+        if (line.charAt(commas[5] + 1) == 'W') currentLon = -currentLon;
+      }
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
-
+  gpsSerial.begin(9600);
   pinMode(PULSE_PIN, INPUT_PULLUP);
-  Wire.begin(4, 5); // SDA = D2, SCL = D1
+  Wire.begin(D2, D1);
   Wire.setClock(100000);
 
-  if (mpu.begin()) {
-    mpuFound = true;
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-  }
+  uint8_t oledAddr = 0x3C;
+  if (scanI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
+  else if (scanI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
 
-  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    oledFound = true;
-  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
-    oledFound = true;
-  }
-
-  if (oledFound) {
+  if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(15, 12);
+    display.setCursor(15, 10);
     display.print("TrekSafe");
     display.setTextSize(1);
-    display.setCursor(18, 38);
-    display.print("Pulse Node: D3");
+    display.setCursor(16, 36);
+    display.print("GPS + Live Pulse");
     display.display();
     delay(1200);
+  }
+
+  if (mpu.begin()) {
+    mpuOK = true;
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   }
 }
 
 void loop() {
-  int rawPulse = digitalRead(PULSE_PIN);
+  while (gpsSerial.available() > 0) {
+    String nmea = gpsSerial.readStringUntil('\\n');
+    nmea.trim();
+    if (nmea.length() > 10) parseNMEALine(nmea);
+  }
 
-  if (rawPulse == HIGH && lastPinState == LOW) {
+  int rawState = digitalRead(PULSE_PIN);
+  if (rawState == HIGH && lastPinState == LOW) {
     unsigned long now = millis();
-    unsigned long duration = now - lastBeatTime;
-
-    if (duration > 330 && duration < 1500) {
+    unsigned long delta = now - lastBeatTime;
+    if (delta > 320 && delta < 1400) {
       lastBeatTime = now;
-      int instantBPM = 60000 / duration;
-
-      rateList[rateIndex] = instantBPM;
+      rateList[rateIndex] = 60000 / delta;
       rateIndex = (rateIndex + 1) % RATE_SIZE;
-
       int sum = 0;
-      for (int i = 0; i < RATE_SIZE; i++) {
-        sum += rateList[i];
-      }
+      for (int i = 0; i < RATE_SIZE; i++) sum += rateList[i];
       currentHR = sum / RATE_SIZE;
-      currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 94, 99);
-    } else if (lastBeatTime == 0) {
+      currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 95, 99);
+    } else if (lastBeatTime == 0 || delta >= 1400) {
       lastBeatTime = now;
     }
   }
-  lastPinState = rawPulse;
+  lastPinState = rawState;
 
-  if (millis() - lastBeatTime > 2500) {
+  if (millis() - lastBeatTime > 2200) {
     currentHR = 0;
     currentSpO2 = 0;
   }
 
-  if (mpuFound) {
+  if (mpuOK) {
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
-    float totalAccel = sqrt(a.acceleration.x * a.acceleration.x + 
-                            a.acceleration.y * a.acceleration.y + 
-                            a.acceleration.z * a.acceleration.z);
-    if (totalAccel > 11.5 || totalAccel < 8.2) {
-      motion = "Walking";
-    } else {
-      motion = "Stationary";
-    }
+    float totalAccel = sqrt(a.acceleration.x * a.acceleration.x + a.acceleration.y * a.acceleration.y + a.acceleration.z * a.acceleration.z);
+    motion = (totalAccel > 11.5 || totalAccel < 8.2) ? "Walking" : "Stationary";
   }
 
-  if (oledFound && (millis() - lastOLED > 250)) {
+  if (oledOK && (millis() - lastOLED > 250)) {
     lastOLED = millis();
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
@@ -301,45 +344,46 @@ void loop() {
     display.setCursor(0, 0);
     display.print("TREKSAFE");
     display.setCursor(76, 0);
-    display.print("BAT:96%");
-    display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+    display.print(gpsFix ? "GPS:LOCK" : "GPS:SCAN");
+    display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    display.setCursor(0, 15);
-    display.setTextSize(1);
+    display.setCursor(0, 14);
     display.print("HEART RATE: ");
     if (currentHR > 0) {
       display.setTextSize(2);
-      display.setCursor(70, 13);
+      display.setCursor(72, 12);
       display.print(currentHR);
       display.setTextSize(1);
-      display.setCursor(108, 19);
+      display.setCursor(108, 18);
       display.print("BPM");
     } else {
       display.print("WAIT D3");
     }
 
-    display.drawLine(0, 32, 127, 32, SSD1306_WHITE);
+    display.drawLine(0, 31, 127, 31, SSD1306_WHITE);
 
-    display.setCursor(0, 37);
+    display.setCursor(0, 36);
     display.setTextSize(1);
     display.print("SpO2 LEVEL: ");
     if (currentSpO2 > 0) {
       display.setTextSize(2);
-      display.setCursor(70, 35);
+      display.setCursor(72, 34);
       display.print(currentSpO2);
       display.setTextSize(1);
-      display.setCursor(100, 41);
+      display.setCursor(100, 40);
       display.print("%");
     } else {
       display.print("-- %");
     }
 
-    display.drawLine(0, 52, 127, 52, SSD1306_WHITE);
+    display.drawLine(0, 51, 127, 51, SSD1306_WHITE);
 
-    display.setCursor(0, 56);
+    display.setCursor(0, 55);
     display.setTextSize(1);
-    display.print("STATUS: ");
-    display.print(motion);
+    display.print("LOC:");
+    display.print(String(currentLat, 4));
+    display.print(",");
+    display.print(String(currentLon, 4));
 
     display.display();
   }
@@ -352,7 +396,13 @@ void loop() {
     Serial.print(currentSpO2);
     Serial.print(",\\"mot\\":\\"");
     Serial.print(motion);
-    Serial.print("\\",\\"fall\\":0");
+    Serial.print("\\",\\"lat\\":");
+    Serial.print(String(currentLat, 5));
+    Serial.print(",\\"lon\\":");
+    Serial.print(String(currentLon, 5));
+    Serial.print(",\\"gps\\":");
+    Serial.print(gpsFix ? 1 : 0);
+    Serial.print(",\\"fall\\":0");
     Serial.print(",\\"batt\\":");
     Serial.print(battery);
     Serial.println("}");

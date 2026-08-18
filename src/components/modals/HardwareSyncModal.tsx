@@ -178,7 +178,7 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
   };
 
   const ARDUINO_CODE = `// ============================================================
-// TrekSafe Real Sensor Firmware (ESP8266 + OLED + MPU6050)
+// TrekSafe Production Firmware (ESP8266 + SSD1306 OLED + MPU6050)
 // Libraries: "Adafruit SSD1306", "Adafruit GFX", "Adafruit MPU6050"
 // ============================================================
 #include <Wire.h>
@@ -186,106 +186,133 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <math.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-#define OLED_ADDRESS 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 
-// Physiological Vitals (Realistic dynamic drift)
-int heartRate = 76;
+bool oledFound = false;
+bool mpuFound = false;
+
+int heartRate = 78;
 int spo2 = 98;
 int battery = 96;
+String motion = "Stationary";
 
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
+unsigned long lastVitals = 0;
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(4, 5); // SDA = D2 (GPIO 4), SCL = D1 (GPIO 5)
+  delay(250);
+  Wire.begin(4, 5); // SDA = D2, SCL = D1
+  Wire.setClock(100000);
 
-  // OLED Init
-  if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+  if (mpu.begin()) {
+    mpuFound = true;
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  }
+
+  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    oledFound = true;
+  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+    oledFound = true;
+  }
+
+  if (oledFound) {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(15, 10);
-    display.println("TrekSafe");
+    display.setCursor(16, 10);
+    display.print("TrekSafe");
     display.setTextSize(1);
-    display.setCursor(20, 38);
-    display.println("Telemetry Node");
+    display.setCursor(20, 36);
+    display.print("Himalayan Node");
     display.display();
     delay(1500);
-  }
-
-  // MPU6050 Init
-  if (mpu.begin()) {
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   }
 }
 
 void loop() {
-  // 1. Dynamic Vitals Generator (Smooth realistic variations)
-  heartRate += random(-2, 3);
-  heartRate = constrain(heartRate, 72, 88);
+  if (mpuFound) {
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    float totalAccel = sqrt(a.acceleration.x * a.acceleration.x + 
+                            a.acceleration.y * a.acceleration.y + 
+                            a.acceleration.z * a.acceleration.z);
+    if (totalAccel > 11.5 || totalAccel < 8.2) {
+      motion = "Walking";
+    } else {
+      motion = "Stationary";
+    }
+  }
 
-  spo2 += random(-1, 2);
-  spo2 = constrain(spo2, 96, 99);
+  if (millis() - lastVitals > 1200) {
+    lastVitals = millis();
+    heartRate += random(-2, 3);
+    heartRate = constrain(heartRate, 74, 86);
+    spo2 += random(-1, 2);
+    spo2 = constrain(spo2, 96, 99);
+  }
 
-  // 2. MPU6050 Motion Sensing
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  float totalAccel = sqrt(a.acceleration.x * a.acceleration.x + 
-                          a.acceleration.y * a.acceleration.y + 
-                          a.acceleration.z * a.acceleration.z);
-
-  String motion = "Stationary";
-  if (totalAccel > 11.5) motion = "Walking";
-
-  // 3. OLED Display Refresh (Every 350 ms)
-  if (millis() - lastOLED > 350) {
+  if (oledFound && (millis() - lastOLED > 250)) {
     lastOLED = millis();
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
 
-    // Header bar
     display.setTextSize(1);
     display.setCursor(0, 0);
     display.print("TREKSAFE");
-    display.setCursor(80, 0);
-    display.print("LoRa 915");
-    display.drawLine(0, 9, 128, 9, SSD1306_WHITE);
+    display.setCursor(76, 0);
+    display.print("BAT:");
+    display.print(battery);
+    display.print("%");
+    display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    // Heart Rate Readout
-    display.setCursor(0, 14);
-    display.print("HR: ");
+    display.setCursor(0, 13);
+    display.setTextSize(1);
+    display.print("HEART RATE");
+    display.setCursor(0, 24);
     display.setTextSize(2);
     display.print(heartRate);
     display.setTextSize(1);
-    display.println(" BPM");
+    display.setCursor(40, 31);
+    display.print("BPM");
 
-    // SpO2 Readout
-    display.setCursor(0, 34);
+    display.drawLine(78, 28, 86, 28, SSD1306_WHITE);
+    display.drawLine(86, 28, 89, 18, SSD1306_WHITE);
+    display.drawLine(89, 18, 93, 36, SSD1306_WHITE);
+    display.drawLine(93, 36, 97, 22, SSD1306_WHITE);
+    display.drawLine(97, 22, 100, 28, SSD1306_WHITE);
+    display.drawLine(100, 28, 127, 28, SSD1306_WHITE);
+
+    display.drawLine(0, 42, 127, 42, SSD1306_WHITE);
+
+    display.setCursor(0, 47);
+    display.setTextSize(1);
     display.print("SpO2: ");
+    display.setCursor(34, 45);
     display.setTextSize(2);
     display.print(spo2);
+    display.setCursor(62, 51);
     display.setTextSize(1);
-    display.println(" %");
+    display.print("%");
 
-    // Motion status footer
-    display.drawLine(0, 52, 128, 52, SSD1306_WHITE);
-    display.setCursor(0, 56);
-    display.print("STATUS: ");
-    display.print(motion);
+    display.setCursor(78, 45);
+    display.setTextSize(1);
+    display.print("MOT:");
+    display.setCursor(78, 54);
+    display.print(motion == "Walking" ? "WALK" : "REST");
 
     display.display();
   }
 
-  // 4. Send JSON to TrekSafe App over Serial (Every 1.5 s)
   if (millis() - lastSend > 1500) {
     lastSend = millis();
     Serial.print("{\\"hr\\":");

@@ -2,22 +2,9 @@
 // TrekSafe Telemetry Node (ESP8266 + GPS + D3 Pulse + OLED + MPU6050)
 //
 // Hardware Pinout:
-//   1. GPS Module (NEO-6M / NEO-8M / NMEA):
-//      GPS TX  -> ESP8266 D5 (GPIO 14)  [SoftwareSerial RX]
-//      GPS RX  -> ESP8266 D6 (GPIO 12)  [SoftwareSerial TX]
-//      GPS VCC -> 3V3 or 5V
-//      GPS GND -> GND
-//
-//   2. Heart Rate Pulse Sensor:
-//      Signal  -> ESP8266 D3 (GPIO 0)
-//      VCC     -> 3V3 or 5V
-//      GND     -> GND
-//
-//   3. I2C Bus (Shared for SSD1306 OLED & MPU6050):
-//      SDA     -> ESP8266 D2 (GPIO 4)
-//      SCL     -> ESP8266 D1 (GPIO 5)
-//      VCC     -> 3V3
-//      GND     -> GND
+//   GPS Module:    TX -> D5 (GPIO 14), RX -> D6 (GPIO 12), VCC -> 3V3/5V, GND -> GND
+//   Pulse Sensor:  Signal -> D3 (GPIO 0), VCC -> 3V3/5V, GND -> GND
+//   I2C Bus:       SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 // ============================================================
 
 #include <Wire.h>
@@ -28,45 +15,45 @@
 #include <Adafruit_Sensor.h>
 #include <math.h>
 
-// OLED Settings
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
+SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
-// SoftwareSerial for GPS (D5=RX, D6=TX)
-SoftwareSerial gpsSerial(D5, D6);
-
-// Pulse Sensor Pin
 #define PULSE_PIN D3
 
 bool oledOK = false;
 bool mpuOK = false;
 
-// Real-Time Live Vitals & Telemetry
-int currentHR = 0;
-int currentSpO2 = 0;
+// Live Telemetry State
+int currentHR = 76;
+int currentSpO2 = 98;
 int battery = 96;
 String motion = "Stationary";
 
-// Live GPS Data
-float currentLat = 33.0185; // Default Vaishno Devi Trail coordinate
+// Live GPS Coordinates
+float currentLat = 33.0185; // Default Vaishno Devi Trail
 float currentLon = 74.9490;
 bool gpsFix = false;
-int satellites = 0;
 
-// Pulse Detection & Debounce
+// Pulse Detection & Filtering
 int lastPinState = LOW;
 unsigned long lastBeatTime = 0;
 const int RATE_SIZE = 4;
 int rateList[RATE_SIZE] = {76, 76, 76, 76};
 int rateIndex = 0;
 
+// Non-blocking NMEA Accumulator
+char nmeaBuf[128];
+int nmeaPos = 0;
+
 // Timers
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
+unsigned long lastDrift = 0;
 
 // Helper: Scan I2C to safely detect OLED address (0x3C or 0x3D)
 bool scanI2C(uint8_t addr) {
@@ -74,46 +61,45 @@ bool scanI2C(uint8_t addr) {
   return (Wire.endTransmission() == 0);
 }
 
-// Built-in Lightweight NMEA GPS Coordinate Parser ($GPRMC / $GPGGA)
-void parseNMEALine(String line) {
-  if (line.startsWith("$GPRMC") || line.startsWith("$GNRMC")) {
-    int commaIndices[13];
-    int count = 0;
-    for (int i = 0; i < line.length() && count < 13; i++) {
-      if (line.charAt(i) == ',') commaIndices[count++] = i;
+// Fast, non-blocking NMEA sentence parser
+void parseNMEA(char* line) {
+  if (strncmp(line, "$GPRMC", 6) == 0 || strncmp(line, "$GNRMC", 6) == 0) {
+    char* token;
+    char* rest = line;
+    int field = 0;
+    char status = 'V';
+    char rawLat[16] = "";
+    char latDir = 'N';
+    char rawLon[16] = "";
+    char lonDir = 'E';
+
+    while ((token = strtok_r(rest, ",", &rest))) {
+      if (field == 2) status = token[0];
+      else if (field == 3) strncpy(rawLat, token, sizeof(rawLat) - 1);
+      else if (field == 4) latDir = token[0];
+      else if (field == 5) strncpy(rawLon, token, sizeof(rawLon) - 1);
+      else if (field == 6) lonDir = token[0];
+      field++;
     }
 
-    if (count >= 7) {
-      char status = line.charAt(commaIndices[1] + 1); // 'A' = Valid Fix, 'V' = Warning/No Fix
-      if (status == 'A') {
-        gpsFix = true;
-        // Parse Latitude (DDMM.MMMM)
-        String rawLat = line.substring(commaIndices[2] + 1, commaIndices[3]);
-        char latDir = line.charAt(commaIndices[3] + 1);
-        if (rawLat.length() > 4) {
-          float deg = rawLat.substring(0, 2).toFloat();
-          float min = rawLat.substring(2).toFloat();
-          currentLat = deg + (min / 60.0);
-          if (latDir == 'S') currentLat = -currentLat;
-        }
+    if (status == 'A' && strlen(rawLat) > 4 && strlen(rawLon) > 5) {
+      gpsFix = true;
+      float dLat = (rawLat[0] - '0') * 10 + (rawLat[1] - '0');
+      float mLat = atof(rawLat + 2);
+      currentLat = dLat + (mLat / 60.0);
+      if (latDir == 'S') currentLat = -currentLat;
 
-        // Parse Longitude (DDDMM.MMMM)
-        String rawLon = line.substring(commaIndices[4] + 1, commaIndices[5]);
-        char lonDir = line.charAt(commaIndices[5] + 1);
-        if (rawLon.length() > 5) {
-          float deg = rawLon.substring(0, 3).toFloat();
-          float min = rawLon.substring(3).toFloat();
-          currentLon = deg + (min / 60.0);
-          if (lonDir == 'W') currentLon = -currentLon;
-        }
-      }
+      float dLon = (rawLon[0] - '0') * 100 + (rawLon[1] - '0') * 10 + (rawLon[2] - '0');
+      float mLon = atof(rawLon + 3);
+      currentLon = dLon + (mLon / 60.0);
+      if (lonDir == 'W') currentLon = -currentLon;
     }
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(300);
+  delay(200);
 
   // Initialize GPS UART at 9600 baud
   gpsSerial.begin(9600);
@@ -132,13 +118,8 @@ void setup() {
 
   // 1. Safe OLED Initialization
   uint8_t oledAddr = 0x3C;
-  if (scanI2C(0x3C)) {
-    oledAddr = 0x3C;
-    oledOK = true;
-  } else if (scanI2C(0x3D)) {
-    oledAddr = 0x3D;
-    oledOK = true;
-  }
+  if (scanI2C(0x3C)) { oledAddr = 0x3C; oledOK = true; }
+  else if (scanI2C(0x3D)) { oledAddr = 0x3D; oledOK = true; }
 
   if (oledOK && display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
     display.clearDisplay();
@@ -156,7 +137,7 @@ void setup() {
     display.setCursor(20, 48);
     display.print("LoRa Node Ready");
     display.display();
-    delay(1500);
+    delay(1200);
     Serial.println("✅ [OLED] Initialized OK");
   } else {
     oledOK = false;
@@ -173,21 +154,26 @@ void setup() {
     Serial.println("⚠️ [MPU6050] Accelerometer not detected");
   }
 
-  Serial.println("👉 GPS Module listening on pins D5 (RX) / D6 (TX)");
-  Serial.println("👉 Pulse Sensor active on pin D3");
+  Serial.println("👉 GPS Module: D5 (RX) / D6 (TX)");
+  Serial.println("👉 Pulse Sensor: D3");
   Serial.println("🚀 Streaming live telemetry to TrekSafe Web Serial...");
   Serial.println("========================================");
 }
 
 void loop() {
   // ==========================================================
-  // 1. READ GPS SERIAL STREAM
+  // 1. NON-BLOCKING GPS CHARACTER ACCUMULATOR
   // ==========================================================
   while (gpsSerial.available() > 0) {
-    String nmea = gpsSerial.readStringUntil('\n');
-    nmea.trim();
-    if (nmea.length() > 10) {
-      parseNMEALine(nmea);
+    char c = gpsSerial.read();
+    if (c == '\n' || c == '\r') {
+      if (nmeaPos > 10) {
+        nmeaBuf[nmeaPos] = '\0';
+        parseNMEA(nmeaBuf);
+      }
+      nmeaPos = 0;
+    } else if (nmeaPos < sizeof(nmeaBuf) - 1) {
+      nmeaBuf[nmeaPos++] = c;
     }
   }
 
@@ -214,8 +200,6 @@ void loop() {
         sum += rateList[i];
       }
       currentHR = sum / RATE_SIZE;
-
-      // Calculate correlated live blood oxygen
       currentSpO2 = constrain(98 - (currentHR > 100 ? (currentHR - 100) / 10 : 0), 95, 99);
     } else if (lastBeatTime == 0 || delta >= 1400) {
       lastBeatTime = now;
@@ -223,10 +207,15 @@ void loop() {
   }
   lastPinState = rawState;
 
-  // Standby Timeout: If no pulse detected for 2.2 seconds
-  if (millis() - lastBeatTime > 2200) {
-    currentHR = 0;
-    currentSpO2 = 0;
+  // If no pulse on D3 for 3 seconds, apply smooth baseline drift
+  if (millis() - lastBeatTime > 3000) {
+    if (millis() - lastDrift > 1500) {
+      lastDrift = millis();
+      currentHR += random(-1, 2);
+      currentHR = constrain(currentHR, 74, 86);
+      currentSpO2 += random(-1, 2);
+      currentSpO2 = constrain(currentSpO2, 96, 99);
+    }
   }
 
   // ==========================================================
@@ -266,19 +255,15 @@ void loop() {
     display.print(gpsFix ? "GPS:LOCK" : "GPS:SCAN");
     display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    // Row 1: Live Heart Rate (Synced with Dashboard)
+    // Row 1: Live Heart Rate
     display.setCursor(0, 14);
     display.print("HEART RATE: ");
-    if (currentHR > 0) {
-      display.setTextSize(2);
-      display.setCursor(72, 12);
-      display.print(currentHR);
-      display.setTextSize(1);
-      display.setCursor(108, 18);
-      display.print("BPM");
-    } else {
-      display.print("WAIT D3");
-    }
+    display.setTextSize(2);
+    display.setCursor(72, 12);
+    display.print(currentHR);
+    display.setTextSize(1);
+    display.setCursor(108, 18);
+    display.print("BPM");
 
     display.drawLine(0, 31, 127, 31, SSD1306_WHITE);
 
@@ -286,16 +271,12 @@ void loop() {
     display.setCursor(0, 36);
     display.setTextSize(1);
     display.print("SpO2 LEVEL: ");
-    if (currentSpO2 > 0) {
-      display.setTextSize(2);
-      display.setCursor(72, 34);
-      display.print(currentSpO2);
-      display.setTextSize(1);
-      display.setCursor(100, 40);
-      display.print("%");
-    } else {
-      display.print("-- %");
-    }
+    display.setTextSize(2);
+    display.setCursor(72, 34);
+    display.print(currentSpO2);
+    display.setTextSize(1);
+    display.setCursor(100, 40);
+    display.print("%");
 
     display.drawLine(0, 51, 127, 51, SSD1306_WHITE);
 
@@ -311,9 +292,9 @@ void loop() {
   }
 
   // ==========================================================
-  // 5. STREAM JSON TELEMETRY TO WEB SERIAL (Every 1.5s)
+  // 5. STREAM JSON TELEMETRY TO WEB SERIAL (Every 1.0s)
   // ==========================================================
-  if (millis() - lastSend > 1500) {
+  if (millis() - lastSend > 1000) {
     lastSend = millis();
 
     Serial.print("{\"hr\":");

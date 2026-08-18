@@ -360,6 +360,8 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
   }, [showToast]);
 
   const applyHardwarePayload = useCallback((p: any) => {
+    let updatedTrekker: Trekker | null = null;
+
     setTrekkers(prev => prev.map(t => {
       if (t.id === 0) {
         const hr = p.hr !== undefined ? parseInt(p.hr) : t.hr;
@@ -373,7 +375,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           triggerEmergency('You (This Device)', hr, spo2, 'Physical Prototype Accelerometer Fall / Critical Strain');
         }
 
-        return {
+        updatedTrekker = {
           ...t,
           hr,
           spo2,
@@ -384,9 +386,22 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           status: isFallen ? 'red' : (hr > 110 || spo2 < 93) ? 'amber' : 'green',
           battery: p.batt !== undefined ? parseInt(p.batt) : t.battery
         };
+
+        return updatedTrekker;
       }
       return t;
     }));
+
+    if (updatedTrekker) {
+      const uT: Trekker = updatedTrekker;
+      setSelectedTrekker(prev => (prev && prev.id === 0 ? uT : prev));
+      setVitalsHistory(prev => ({
+        hr: [...prev.hr.slice(1), uT.hr],
+        spo2: [...prev.spo2.slice(1), uT.spo2],
+        labels: [...prev.labels.slice(1), new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })]
+      }));
+    }
+
     setHardwareConnected(true);
   }, [triggerEmergency]);
 

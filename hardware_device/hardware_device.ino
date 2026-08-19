@@ -1,13 +1,12 @@
 // ============================================================
-// TrekSafe Telemetry Node - Full Mission System
-// ESP8266 + SSD1306 OLED + MPU6050 IMU + GPS + 3-Pin Buzzer + 4-Pin Button
+// TrekSafe Telemetry Node - Mission System
+// ESP8266 + SSD1306 OLED + MPU6050 IMU + GPS + 3-Pin Buzzer
 //
 // Hardware Wiring:
 //   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   MPU6050 IMU:     SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14 - ESP RX), RX -> D6 (GPIO 12 - ESP TX), VCC -> Vin (5V), GND -> GND
 //   3-Pin Buzzer:    S (Signal) -> D0 (GPIO 16), + (VCC) -> 3V3, - (GND) -> GND
-//   4-Pin Button:    Pin 1 -> D7 (GPIO 13), Pin 4 (diagonally opposite) -> GND (INPUT_PULLUP)
 //   On-board LED:    D4 (GPIO 2 - Blinks on live telemetry transmission)
 // ============================================================
 
@@ -27,8 +26,7 @@ Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
 #define ONBOARD_LED LED_BUILTIN // NodeMCU On-board Blue LED (GPIO 2 / D4)
-#define BUZZER_PIN D0           // 3-Pin Buzzer Signal Pin (GPIO 16 - Safe Boot Pin)
-#define BUTTON_PIN D7           // Cancel Push Button (GPIO 13)
+#define BUZZER_PIN D0           // 3-Pin Buzzer Signal Pin (GPIO 16)
 
 bool oledOK = false;
 bool mpuOK = false;
@@ -36,16 +34,9 @@ bool gpsFix = false;
 unsigned long lastGpsSentenceTime = 0;
 
 // Fall Detection & Buzzer Alarm State
-bool isFallWarning = false;
-bool isConfirmedFall = false;
+bool isFall = false;
 unsigned long fallStartTime = 0;
-unsigned long lastAlarmClearTime = 0;
-const unsigned long FALL_TIMEOUT_MS = 15000; // 15 seconds cancellation window
-
-// Button State Tracking (Edge-Triggered with Debounce)
-int lastButtonReading = HIGH;
-unsigned long lastDebounceTime = 0;
-const unsigned long DEBOUNCE_DELAY = 50;
+const unsigned long ALARM_DURATION_MS = 15000; // Buzzer sounds for 15 seconds upon fall impact
 
 // Vitals & State
 int currentHR = 76;
@@ -181,23 +172,21 @@ void setup() {
   pinMode(ONBOARD_LED, OUTPUT);
   digitalWrite(ONBOARD_LED, LOW);
 
-  // Setup Buzzer (PWM / Active) & Button (INPUT_PULLUP)
+  // Setup Buzzer Pin (PWM Passive / 3-Pin Active)
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
   digitalWrite(BUZZER_PIN, LOW);
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Serial.begin(115200);
   delay(300);
 
   Serial.println();
   Serial.println("=================================================");
-  Serial.println("   TREKSAFE TELEMETRY NODE (FULL MISSION)        ");
+  Serial.println("   TREKSAFE TELEMETRY NODE (FALL ALARM READY)    ");
   Serial.println("=================================================");
   Serial.println("🛰️ GPS Module listening on D5 (RX) / D6 (TX) @ 9600 baud");
   Serial.println("📶 Wi-Fi Positioning managed dynamically by Web App");
   Serial.println("🔊 3-Pin Buzzer Signal on Pin D0 (GPIO 16)");
-  Serial.println("🔘 Cancel Button on Pin D7 (GPIO 13)");
   Serial.println("⚡ Broadcasting live JSON telemetry at 115200 baud...");
 
   pinMode(D5, INPUT_PULLUP);
@@ -248,7 +237,7 @@ void setup() {
     display.setCursor(12, 34);
     display.print("NodeMCU Mission");
     display.setCursor(12, 48);
-    display.print("Wi-Fi + GPS Ready");
+    display.print("Fall Alarm Active");
     display.display();
     delay(1200);
   }
@@ -271,34 +260,8 @@ void loop() {
   // 1. Process Physical GPS Data
   checkGPS();
 
-  // 2. Check 4-Pin Button Press with Edge Detection & Debounce
-  int reading = digitalRead(BUTTON_PIN);
-  if (reading != lastButtonReading) {
-    lastDebounceTime = millis();
-  }
-
-  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
-    static int debouncedState = HIGH;
-    if (reading != debouncedState) {
-      debouncedState = reading;
-      // Trigger ONLY when button transitions from HIGH (unpressed) to LOW (pressed)
-      if (debouncedState == LOW) {
-        if (isFallWarning || isConfirmedFall) {
-          isFallWarning = false;
-          isConfirmedFall = false;
-          noTone(BUZZER_PIN);
-          digitalWrite(BUZZER_PIN, LOW);
-          lastAlarmClearTime = millis();
-          motion = "Walking";
-          Serial.println("🔘 [BUTTON] User pressed cancel button! False alarm cleared.");
-        }
-      }
-    }
-  }
-  lastButtonReading = reading;
-
-  // 3. Process MPU6050 Motion & Fall Detection (with 4-second cooldown after cancellation)
-  if (mpuOK && !isFallWarning && !isConfirmedFall && (millis() - lastAlarmClearTime > 4000)) {
+  // 2. Process MPU6050 Motion & Fall Detection
+  if (mpuOK) {
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
     float totalAccel = sqrt(
@@ -307,40 +270,39 @@ void loop() {
       a.acceleration.z * a.acceleration.z
     );
 
-    // Hard Impact Threshold: >= 28.0 m/s^2 (~2.85G shock impact)
-    if (totalAccel >= 28.0) {
-      isFallWarning = true;
-      fallStartTime = millis();
-      motion = "⚠️ FALL DETECTED";
-      Serial.println("🚨 [MPU6050] Fall impact spike detected! 15-second buzzer countdown started.");
-    } else if (totalAccel > 13.0) {
-      motion = "Walking";
-    } else {
-      motion = "Stationary";
+    // Hard Impact Threshold: >= 26.0 m/s^2 (~2.65G shock impact)
+    if (totalAccel >= 26.0) {
+      if (!isFall) {
+        isFall = true;
+        fallStartTime = millis();
+        motion = "⚠️ FALL DETECTED";
+        Serial.println("🚨 [MPU6050] Fall impact detected! Buzzer alarm ACTIVATED!");
+      }
+    } else if (!isFall) {
+      if (totalAccel > 13.0) {
+        motion = "Walking";
+      } else {
+        motion = "Stationary";
+      }
     }
   }
 
-  // 4. Handle 15-Second Fall Warning & Buzzer Tone
-  if (isFallWarning) {
+  // 3. Handle Buzzer Alarm Sound
+  if (isFall) {
     unsigned long elapsed = millis() - fallStartTime;
-    if (elapsed < FALL_TIMEOUT_MS) {
-      int remainingSec = 15 - (int)(elapsed / 1000);
-      motion = "FALL! " + String(remainingSec) + "s (BTN)";
-
-      // Alternating warning chirp on D0
-      int toneFreq = (millis() % 400 < 200) ? 2600 : 1800;
+    if (elapsed < ALARM_DURATION_MS) {
+      // Alternating urgent warning alarm chirp on D0
+      int toneFreq = (millis() % 350 < 175) ? 2800 : 1900;
       tone(BUZZER_PIN, toneFreq);
+      motion = "⚠️ FALL DETECTED";
     } else {
-      // 15 seconds elapsed with NO button press!
-      isFallWarning = false;
-      isConfirmedFall = true;
-      motion = "CRITICAL FALL IMPACT";
-      Serial.println("🚨 [EMERGENCY] 15s elapsed without response! Emergency dispatch triggered!");
+      // 15 seconds alarm window completed -> return to normal sensing
+      isFall = false;
+      noTone(BUZZER_PIN);
+      digitalWrite(BUZZER_PIN, LOW);
+      motion = "Walking";
+      Serial.println("ℹ️ Fall alarm timeout completed. Resuming normal monitoring.");
     }
-  } else if (isConfirmedFall) {
-    // Continuous urgent SOS alarm tone
-    int toneFreq = (millis() % 300 < 150) ? 3200 : 2200;
-    tone(BUZZER_PIN, toneFreq);
   } else {
     noTone(BUZZER_PIN);
     digitalWrite(BUZZER_PIN, LOW);
@@ -355,7 +317,7 @@ void loop() {
     lastSend = now;
 
     // Smooth Heart Rate
-    if (isFallWarning || isConfirmedFall) {
+    if (isFall) {
       currentHR = 135;
       currentSpO2 = 88;
     } else {
@@ -387,7 +349,7 @@ void loop() {
       Serial.print(",\"gps\":0");
     }
     Serial.print(",\"fall\":");
-    Serial.print(isConfirmedFall ? 1 : 0);
+    Serial.print(isFall ? 1 : 0);
     Serial.print(",\"batt\":");
     Serial.print(battery);
     Serial.println("}");
@@ -403,45 +365,21 @@ void loop() {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
 
-    if (isFallWarning) {
-      // Urgent Fall Warning Countdown Screen
-      unsigned long elapsed = millis() - fallStartTime;
-      int remainingSec = 15 - (int)(elapsed / 1000);
-      if (remainingSec < 0) remainingSec = 0;
-
+    if (isFall) {
+      // Urgent Fall Warning Screen
       display.setTextSize(1);
-      display.setCursor(10, 2);
+      display.setCursor(10, 4);
       display.print("⚠️ FALL DETECTED!");
 
-      display.drawLine(0, 13, 127, 13, SSD1306_WHITE);
-
-      display.setTextSize(1);
-      display.setCursor(8, 18);
-      display.print("BUZZER ALARM ON!");
+      display.drawLine(0, 15, 127, 15, SSD1306_WHITE);
 
       display.setTextSize(2);
-      display.setCursor(20, 32);
-      display.print("CANCEL:");
-      display.print(remainingSec);
-      display.print("s");
-
-      display.setTextSize(1);
-      display.setCursor(4, 52);
-      display.print("PRESS BUTTON IF SAFE");
-    } else if (isConfirmedFall) {
-      // Confirmed Emergency Screen
-      display.setTextSize(1);
-      display.setCursor(4, 2);
-      display.print("🚨 RESCUE DISPATCHED");
-      display.drawLine(0, 13, 127, 13, SSD1306_WHITE);
-
-      display.setTextSize(2);
-      display.setCursor(12, 22);
-      display.print("SOS SENT");
+      display.setCursor(16, 24);
+      display.print("BUZZER ON");
 
       display.setTextSize(1);
       display.setCursor(8, 48);
-      display.print("HELP IS ON THE WAY");
+      display.print("EMERGENCY ALERT SENT");
     } else {
       // Normal Telemetry Screen
       display.setTextSize(1);

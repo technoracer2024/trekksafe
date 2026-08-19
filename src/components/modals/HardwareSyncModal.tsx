@@ -380,41 +380,17 @@ void setup() {
   pinMode(D5, INPUT_PULLUP);
   gpsSerial.begin(9600);
 
-  // Initialize I2C Bus on D2 (SDA) and D1 (SCL)
+  // Safe I2C Initialization with Clock Stretch Limit (Prevents hanging)
   Wire.begin(D2, D1);
   Wire.setClock(100000);
-  delay(100);
+  #if defined(ESP8266)
+  Wire.setClockStretchLimit(2000); // 2ms timeout prevents hanging if no I2C device
+  #endif
+  delay(50);
 
-  // 1. Automatic I2C Bus Scanner
-  Serial.println("🔍 Scanning I2C Bus on D2 (SDA) / D1 (SCL)...");
-  int nDevices = 0;
-  for (byte address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    byte error = Wire.endTransmission();
-    if (error == 0) {
-      Serial.print("   -> Found I2C Device at address: 0x");
-      if (address < 16) Serial.print("0");
-      Serial.println(address, HEX);
-      nDevices++;
-    }
-  }
-  if (nDevices == 0) {
-    Serial.println("⚠️ No I2C devices found! Please check SDA->D2, SCL->D1, VCC->3V3, GND->GND");
-  }
-
-  // 2. Initialize OLED Display (Try 0x3C first, then 0x3D)
+  // Probe OLED Display
   if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     oledOK = true;
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
-  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
-    oledOK = true;
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
-  } else {
-    oledOK = false;
-    Serial.println("ℹ️ [OLED] Display not detected on D2/D1. Check VCC/GND/SDA/SCL wiring.");
-  }
-
-  if (oledOK) {
     display.clearDisplay();
     display.dim(false);
     display.setTextColor(SSD1306_WHITE);
@@ -425,13 +401,26 @@ void setup() {
     display.setCursor(12, 34);
     display.print("NodeMCU Mission");
     display.setCursor(12, 48);
-    display.print("Fall Alarm Active");
+    display.print("Live Telemetry");
     display.display();
-    delay(1200);
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
+  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+    oledOK = true;
+    display.clearDisplay();
+    display.dim(false);
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(15, 8);
+    display.print("TrekSafe");
+    display.display();
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
+  } else {
+    oledOK = false;
+    Serial.println("ℹ️ [OLED] Display not detected on D2(SDA)/D1(SCL) - continuing stream");
   }
 
-  // 3. Initialize MPU6050 Accelerometer
-  if (mpu.begin(0x68, &Wire) || mpu.begin(0x69, &Wire) || mpu.begin()) {
+  // Probe MPU6050 Accelerometer
+  if (mpu.begin(0x68, &Wire)) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);

@@ -1,13 +1,13 @@
 // ============================================================
-// TrekSafe Telemetry Node - Mission System
-// ESP8266 + SSD1306 OLED + MPU6050 IMU + GPS + 3-Pin Buzzer
+// TrekSafe Telemetry Node - Non-Blocking Rock-Solid Firmware
+// ESP8266 NodeMCU + SSD1306 OLED + MPU6050 IMU + GPS + Buzzer
 //
-// Hardware Wiring:
+// Hardware Pin Connections:
 //   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   MPU6050 IMU:     SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14 - ESP RX), RX -> D6 (GPIO 12 - ESP TX), VCC -> Vin (5V), GND -> GND
 //   3-Pin Buzzer:    S (Signal) -> D0 (GPIO 16), + (VCC) -> 3V3, - (GND) -> GND
-//   On-board LED:    D4 (GPIO 2 - Blinks on live telemetry transmission)
+//   On-board LED:    D4 (GPIO 2 - Blinks every second on JSON packet send)
 // ============================================================
 
 #include <Wire.h>
@@ -25,7 +25,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
-#define ONBOARD_LED LED_BUILTIN // NodeMCU On-board Blue LED (GPIO 2 / D4)
+#define ONBOARD_LED LED_BUILTIN // NodeMCU Blue LED (GPIO 2 / D4)
 #define BUZZER_PIN D0           // 3-Pin Buzzer Signal Pin (GPIO 16)
 
 bool oledOK = false;
@@ -36,7 +36,7 @@ unsigned long lastGpsSentenceTime = 0;
 // Fall Detection & Buzzer Alarm State
 bool isFall = false;
 unsigned long fallStartTime = 0;
-const unsigned long ALARM_DURATION_MS = 15000; // Buzzer sounds for 15 seconds upon fall impact
+const unsigned long ALARM_DURATION_MS = 15000; // 15 seconds alarm
 
 // Vitals & State
 int currentHR = 76;
@@ -44,19 +44,16 @@ int currentSpO2 = 98;
 int battery = 96;
 String motion = "Walking";
 
-// Dynamic GPS Coordinates (0.0 when searching/indoors, Wi-Fi positioning is authoritative)
 float currentLat = 0.0;
 float currentLon = 0.0;
 
-// Simulation Counters
 bool heartBeatIcon = false;
 bool ledState = false;
 
-// Timers
 unsigned long lastSend = 0;
 unsigned long lastOLED = 0;
 
-// Robust NMEA field extractor that properly handles empty comma fields
+// Robust comma field extractor for NMEA GPS
 bool getNMEAField(const char* sentence, int targetIndex, char* output, int maxLen) {
   int currentField = 0;
   int outPos = 0;
@@ -76,7 +73,7 @@ bool getNMEAField(const char* sentence, int targetIndex, char* output, int maxLe
   return (outPos > 0);
 }
 
-// Non-blocking Robust GPS Sentence Decoder
+// Non-blocking GPS Sentence Decoder
 void checkGPS() {
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
@@ -90,7 +87,7 @@ void checkGPS() {
       if (c == '\n' || c == '\r') {
         buf[pos] = '\0';
 
-        // 1. Decode RMC Sentence ($GPRMC or $GNRMC)
+        // Decode RMC Sentence
         if (strstr(buf, "RMC") != NULL) {
           char status[4] = {0};
           char rawLat[16] = {0};
@@ -121,7 +118,7 @@ void checkGPS() {
             lastGpsSentenceTime = millis();
           }
         }
-        // 2. Decode GGA Sentence ($GPGGA or $GNGGA)
+        // Decode GGA Sentence
         else if (strstr(buf, "GGA") != NULL) {
           char rawLat[16] = {0};
           char latDir[4] = {0};
@@ -160,7 +157,6 @@ void checkGPS() {
     }
   }
 
-  // If no GPS satellite sentence for > 6 seconds, revert to Wi-Fi mode
   if (gpsFix && (millis() - lastGpsSentenceTime > 6000)) {
     gpsFix = false;
     currentLat = 0.0;
@@ -172,61 +168,35 @@ void setup() {
   pinMode(ONBOARD_LED, OUTPUT);
   digitalWrite(ONBOARD_LED, LOW);
 
-  // Setup Buzzer Pin (PWM Passive / 3-Pin Active)
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
   digitalWrite(BUZZER_PIN, LOW);
 
   Serial.begin(115200);
-  delay(300);
+  delay(200);
 
   Serial.println();
   Serial.println("=================================================");
-  Serial.println("   TREKSAFE TELEMETRY NODE (FALL ALARM READY)    ");
+  Serial.println("   TREKSAFE TELEMETRY NODE (LIVE STREAM READY)   ");
   Serial.println("=================================================");
-  Serial.println("🛰️ GPS Module listening on D5 (RX) / D6 (TX) @ 9600 baud");
-  Serial.println("📶 Wi-Fi Positioning managed dynamically by Web App");
-  Serial.println("🔊 3-Pin Buzzer Signal on Pin D0 (GPIO 16)");
-  Serial.println("⚡ Broadcasting live JSON telemetry at 115200 baud...");
+  Serial.println("🛰️ GPS on D5 (RX) / D6 (TX)");
+  Serial.println("🔊 3-Pin Buzzer Signal on D0");
+  Serial.println("⚡ Broadcasting live JSON packets @ 115200 baud...");
 
   pinMode(D5, INPUT_PULLUP);
   gpsSerial.begin(9600);
 
-  // Initialize I2C Bus on D2 (SDA) and D1 (SCL)
+  // Safe I2C Initialization with Clock Stretch Limit (Prevents hanging)
   Wire.begin(D2, D1);
   Wire.setClock(100000);
-  delay(100);
+  #if defined(ESP8266)
+  Wire.setClockStretchLimit(2000); // 2ms timeout prevents hanging if no I2C device
+  #endif
+  delay(50);
 
-  // 1. Automatic I2C Bus Scanner
-  Serial.println("🔍 Scanning I2C Bus on D2 (SDA) / D1 (SCL)...");
-  int nDevices = 0;
-  for (byte address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    byte error = Wire.endTransmission();
-    if (error == 0) {
-      Serial.print("   -> Found I2C Device at address: 0x");
-      if (address < 16) Serial.print("0");
-      Serial.println(address, HEX);
-      nDevices++;
-    }
-  }
-  if (nDevices == 0) {
-    Serial.println("⚠️ No I2C devices found! Please check SDA->D2, SCL->D1, VCC->3V3, GND->GND");
-  }
-
-  // 2. Initialize OLED Display (Try 0x3C first, then 0x3D)
+  // Probe OLED Display
   if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     oledOK = true;
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
-  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
-    oledOK = true;
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
-  } else {
-    oledOK = false;
-    Serial.println("ℹ️ [OLED] Display not detected on D2/D1. Check VCC/GND/SDA/SCL wiring.");
-  }
-
-  if (oledOK) {
     display.clearDisplay();
     display.dim(false);
     display.setTextColor(SSD1306_WHITE);
@@ -237,13 +207,26 @@ void setup() {
     display.setCursor(12, 34);
     display.print("NodeMCU Mission");
     display.setCursor(12, 48);
-    display.print("Fall Alarm Active");
+    display.print("Live Telemetry");
     display.display();
-    delay(1200);
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
+  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+    oledOK = true;
+    display.clearDisplay();
+    display.dim(false);
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(15, 8);
+    display.print("TrekSafe");
+    display.display();
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
+  } else {
+    oledOK = false;
+    Serial.println("ℹ️ [OLED] Display not detected on D2(SDA)/D1(SCL) - continuing stream");
   }
 
-  // 3. Initialize MPU6050 Accelerometer
-  if (mpu.begin(0x68, &Wire) || mpu.begin(0x69, &Wire) || mpu.begin()) {
+  // Probe MPU6050 Accelerometer
+  if (mpu.begin(0x68, &Wire)) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
@@ -311,12 +294,12 @@ void loop() {
   unsigned long now = millis();
 
   // ==========================================================
-  // UPDATE VITALS (Every 1000ms)
+  // UPDATE VITALS & BROADCAST JSON (Every 1000ms)
   // ==========================================================
   if (now - lastSend >= 1000) {
     lastSend = now;
 
-    // Smooth Heart Rate
+    // Smooth Heart Rate & SpO2
     if (isFall) {
       currentHR = 135;
       currentSpO2 = 88;
@@ -331,7 +314,7 @@ void loop() {
     ledState = !ledState;
     digitalWrite(ONBOARD_LED, ledState ? LOW : HIGH);
 
-    // BROADCAST EXACT JSON TO USB SERIAL
+    // BROADCAST CLEAN JSON LINE TO USB SERIAL
     Serial.print("{\"hr\":");
     Serial.print(currentHR);
     Serial.print(",\"spo2\":");

@@ -27,7 +27,7 @@ Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
 #define ONBOARD_LED LED_BUILTIN // NodeMCU On-board Blue LED (GPIO 2 / D4)
-#define BUZZER_PIN D0           // 3-Pin / 2-Pin Buzzer Signal Pin (GPIO 16 - Safe Boot Pin)
+#define BUZZER_PIN D0           // 3-Pin Buzzer Signal Pin (GPIO 16 - Safe Boot Pin)
 #define BUTTON_PIN D7           // Cancel Push Button (GPIO 13)
 
 bool oledOK = false;
@@ -181,7 +181,7 @@ void setup() {
   pinMode(ONBOARD_LED, OUTPUT);
   digitalWrite(ONBOARD_LED, LOW);
 
-  // Setup Buzzer (PWM Passive / 3-Pin Active) & Button (INPUT_PULLUP)
+  // Setup Buzzer (PWM / Active) & Button (INPUT_PULLUP)
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
   digitalWrite(BUZZER_PIN, LOW);
@@ -196,39 +196,64 @@ void setup() {
   Serial.println("=================================================");
   Serial.println("🛰️ GPS Module listening on D5 (RX) / D6 (TX) @ 9600 baud");
   Serial.println("📶 Wi-Fi Positioning managed dynamically by Web App");
-  Serial.println("🔊 3-Pin Buzzer Signal on Pin D8 (GPIO 15)");
+  Serial.println("🔊 3-Pin Buzzer Signal on Pin D0 (GPIO 16)");
   Serial.println("🔘 Cancel Button on Pin D7 (GPIO 13)");
   Serial.println("⚡ Broadcasting live JSON telemetry at 115200 baud...");
 
   pinMode(D5, INPUT_PULLUP);
   gpsSerial.begin(9600);
 
+  // Initialize I2C Bus on D2 (SDA) and D1 (SCL)
   Wire.begin(D2, D1);
   Wire.setClock(100000);
+  delay(100);
 
-  // Probe OLED Display
-  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C) || display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+  // 1. Automatic I2C Bus Scanner
+  Serial.println("🔍 Scanning I2C Bus on D2 (SDA) / D1 (SCL)...");
+  int nDevices = 0;
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.print("   -> Found I2C Device at address: 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      nDevices++;
+    }
+  }
+  if (nDevices == 0) {
+    Serial.println("⚠️ No I2C devices found! Please check SDA->D2, SCL->D1, VCC->3V3, GND->GND");
+  }
+
+  // 2. Initialize OLED Display (Try 0x3C first, then 0x3D)
+  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     oledOK = true;
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
+  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+    oledOK = true;
+    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
+  } else {
+    oledOK = false;
+    Serial.println("ℹ️ [OLED] Display not detected on D2/D1. Check VCC/GND/SDA/SCL wiring.");
+  }
+
+  if (oledOK) {
     display.clearDisplay();
     display.dim(false);
     display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    display.setCursor(15, 10);
+    display.setCursor(15, 8);
     display.print("TrekSafe");
     display.setTextSize(1);
-    display.setCursor(20, 36);
-    display.print("Mission Node");
-    display.setCursor(20, 48);
+    display.setCursor(12, 34);
+    display.print("NodeMCU Mission");
+    display.setCursor(12, 48);
     display.print("Wi-Fi + GPS Ready");
     display.display();
-    delay(1000);
-    Serial.println("✅ [OLED] SSD1306 Display connected and ready");
-  } else {
-    oledOK = false;
-    Serial.println("ℹ️ [OLED] Display not detected on D2/D1");
+    delay(1200);
   }
 
-  // Probe MPU6050 Accelerometer
+  // 3. Initialize MPU6050 Accelerometer
   if (mpu.begin(0x68, &Wire) || mpu.begin(0x69, &Wire) || mpu.begin()) {
     mpuOK = true;
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
@@ -302,7 +327,7 @@ void loop() {
       int remainingSec = 15 - (int)(elapsed / 1000);
       motion = "FALL! " + String(remainingSec) + "s (BTN)";
 
-      // Alternating warning chirp for 3-Pin / Passive Buzzer on D8
+      // Alternating warning chirp on D0
       int toneFreq = (millis() % 400 < 200) ? 2600 : 1800;
       tone(BUZZER_PIN, toneFreq);
     } else {
@@ -310,7 +335,7 @@ void loop() {
       isFallWarning = false;
       isConfirmedFall = true;
       motion = "CRITICAL FALL IMPACT";
-      Serial.println("🚨 [EMERGENCY] 15s elapsed without response! Emergency rescue dispatch triggered!");
+      Serial.println("🚨 [EMERGENCY] 15s elapsed without response! Emergency dispatch triggered!");
     }
   } else if (isConfirmedFall) {
     // Continuous urgent SOS alarm tone

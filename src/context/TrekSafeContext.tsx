@@ -143,8 +143,9 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isCalibratedRef = React.useRef<boolean>(false);
+  const hwGpsLockedRef = React.useRef<boolean>(false);
 
-  // Geolocation for user's device
+  // Geolocation for user's device (High-Accuracy Wi-Fi / GPS positioning)
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
@@ -163,21 +164,25 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
         });
 
         setTrekkers(prev => prev.map(t => {
-          if (t.isUser && !t.isLiveHw) {
+          if (t.isUser) {
+            // If physical satellite GPS is active on hardware, keep satellite coordinates;
+            // Otherwise, Wi-Fi Positioning is 100% authoritative!
+            if (hwGpsLockedRef.current) return t;
+
             return {
               ...t,
               lat: latitude,
               lon: longitude,
               accuracy: Math.round(accuracy),
-              gpsStatus: `Live (±${Math.round(accuracy)}m)`,
-              movement: speed && speed > 0.5 ? `Moving (${(speed * 3.6).toFixed(1)} km/h)` : 'Stationary'
+              gpsStatus: `📶 Wi-Fi Positioning (Live · ±${Math.round(accuracy)}m)`,
+              movement: t.isLiveHw ? t.movement : (speed && speed > 0.5 ? `Moving (${(speed * 3.6).toFixed(1)} km/h)` : 'Stationary')
             };
           }
           return t;
         }));
       },
       (err) => console.warn('GPS Notice:', err.message),
-      { enableHighAccuracy: true, timeout: 15000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
@@ -364,11 +369,9 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     const spo2 = p.spo2 !== undefined ? parseInt(p.spo2) : 98;
     let cleanMotion = p.mot !== undefined ? String(p.mot) : 'Walking';
     const isFall = p.fall === 1 || p.fall === true || cleanMotion.includes('CRITICAL') || (cleanMotion.includes('FALL') && !cleanMotion.includes('s'));
-    const lat = p.lat !== undefined ? parseFloat(p.lat) : undefined;
-    const lon = p.lon !== undefined ? parseFloat(p.lon) : undefined;
+    const hwGpsFix = p.gps === 1 && p.lat !== undefined && p.lon !== undefined && !isNaN(p.lat) && !isNaN(p.lon);
+    hwGpsLockedRef.current = hwGpsFix;
     const batt = p.batt !== undefined ? parseInt(p.batt) : 96;
-
-    const gpsStatusStr = p.gps === 1 ? '🛰️ Physical GPS (Locked)' : '📶 High-Accuracy Wi-Fi Positioning';
 
     if (isFall) {
       triggerEmergency('You (This Device)', hr, spo2, 'MPU6050 Accelerometer Impact: 15s Fall Timeout (No Response) — Immediate Rescue Dispatch Required!');
@@ -382,12 +385,12 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           hr,
           spo2,
           movement: isFall ? '⚠️ CRITICAL FALL DETECTED' : cleanMotion,
-          lat: lat ?? t.lat,
-          lon: lon ?? t.lon,
+          lat: hwGpsFix ? p.lat : t.lat,
+          lon: hwGpsFix ? p.lon : t.lon,
           isLiveHw: true,
           status: isFall ? 'red' : (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
           battery: batt,
-          gpsStatus: gpsStatusStr
+          gpsStatus: hwGpsFix ? '🛰️ Physical GPS (Locked)' : (t.gpsStatus?.includes('Wi-Fi') ? t.gpsStatus : '📶 Wi-Fi Positioning (Live)')
         };
       }
       return t;
@@ -403,24 +406,24 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
           spo2,
           movement: isFall ? '⚠️ CRITICAL FALL DETECTED' : cleanMotion,
           status: isFall ? 'red' : (hr > 125 || (spo2 > 0 && spo2 < 89)) ? 'amber' : 'green',
-          lat: lat ?? (prev?.lat ?? 28.4089),
-          lon: lon ?? (prev?.lon ?? 77.3178),
+          lat: hwGpsFix ? p.lat : (prev?.lat ?? userLiveCoords.lat ?? 28.4089),
+          lon: hwGpsFix ? p.lon : (prev?.lon ?? userLiveCoords.lon ?? 77.3178),
           isUser: true,
           isLiveHw: true,
           medicalCondition: 'None (Healthy)',
           riskLevel: isFall ? 'high' : 'normal',
           routeIndex: 0,
           battery: batt,
-          gpsStatus: gpsStatusStr
+          gpsStatus: hwGpsFix ? '🛰️ Physical GPS (Locked)' : (prev?.gpsStatus?.includes('Wi-Fi') ? prev.gpsStatus : '📶 Wi-Fi Positioning (Live)')
         };
       }
       return prev;
     });
 
-    if (lat !== undefined && lon !== undefined) {
+    if (hwGpsFix) {
       setUserLiveCoords({
-        lat,
-        lon,
+        lat: p.lat,
+        lon: p.lon,
         accuracy: 3,
         altitude: '215 m'
       });
@@ -433,7 +436,7 @@ export function TrekSafeProvider({ children }: { children: React.ReactNode }) {
     }));
 
     setHardwareConnected(true);
-  }, [triggerEmergency, showToast]);
+  }, [triggerEmergency, showToast, userLiveCoords.lat, userLiveCoords.lon]);
 
   const [isCalibrated, setIsCalibrated] = useState<boolean>(false);
 

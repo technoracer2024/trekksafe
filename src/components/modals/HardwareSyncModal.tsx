@@ -519,12 +519,16 @@ void loop() {
     Serial.print(currentSpO2);
     Serial.print(",\\"mot\\":\\"");
     Serial.print(motion);
-    Serial.print("\\",\\"lat\\":");
-    Serial.print(String(currentLat, 5));
-    Serial.print(",\\"lon\\":");
-    Serial.print(String(currentLon, 5));
-    Serial.print(",\\"gps\\":");
-    Serial.print(gpsFix ? 1 : 0);
+    Serial.print("\\"");
+    if (gpsFix) {
+      Serial.print(",\\"lat\\":");
+      Serial.print(String(currentLat, 5));
+      Serial.print(",\\"lon\\":");
+      Serial.print(String(currentLon, 5));
+      Serial.print(",\\"gps\\":1");
+    } else {
+      Serial.print(",\\"gps\\":0");
+    }
     Serial.print(",\\"fall\\":");
     Serial.print(isConfirmedFall ? 1 : 0);
     Serial.print(",\\"batt\\":");
@@ -587,7 +591,7 @@ void loop() {
       display.setCursor(0, 0);
       display.print("TREKSAFE");
       display.setCursor(64, 0);
-      display.print(gpsFix ? "GPS:LOCK" : "FARIDABAD");
+      display.print(gpsFix ? "GPS:LOCK" : "WIFI:POS");
       display.setCursor(120, 0);
       display.print(heartBeatIcon ? "*" : " ");
       display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
@@ -620,10 +624,14 @@ void loop() {
       // Row 3: Motion & Coordinates
       display.setCursor(0, 55);
       display.setTextSize(1);
-      display.print("LOC:");
-      display.print(String(currentLat, 3));
-      display.print(",");
-      display.print(String(currentLon, 3));
+      if (gpsFix) {
+        display.print("GPS:");
+        display.print(String(currentLat, 3));
+        display.print(",");
+        display.print(String(currentLon, 3));
+      } else {
+        display.print("LOC: WIFI POSITIONING");
+      }
     }
 
     display.display();

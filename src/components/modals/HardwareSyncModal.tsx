@@ -194,7 +194,7 @@ export default function HardwareSyncModal({ isOpen, onClose }: HardwareSyncModal
 //   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   MPU6050 IMU:     SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14 - ESP RX), RX -> D6 (GPIO 12 - ESP TX), VCC -> Vin (5V), GND -> GND
-//   3-Pin Buzzer:    S (Signal) -> D8 (GPIO 15), + (VCC) -> 3V3, - (GND) -> GND
+//   3-Pin Buzzer:    S (Signal) -> D0 (GPIO 16), + (VCC) -> 3V3, - (GND) -> GND
 //   4-Pin Button:    Pin 1 -> D7 (GPIO 13), Pin 4 (diagonally opposite) -> GND (INPUT_PULLUP)
 //   On-board LED:    D4 (GPIO 2 - Blinks on live telemetry transmission)
 // ============================================================
@@ -215,7 +215,7 @@ Adafruit_MPU6050 mpu;
 SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 
 #define ONBOARD_LED LED_BUILTIN // NodeMCU On-board Blue LED (GPIO 2 / D4)
-#define BUZZER_PIN D8           // 3-Pin / 2-Pin Buzzer Signal Pin (GPIO 15)
+#define BUZZER_PIN D0           // 3-Pin / 2-Pin Buzzer Signal Pin (GPIO 16 - Safe Boot Pin)
 #define BUTTON_PIN D7           // Cancel Push Button (GPIO 13)
 
 bool oledOK = false;

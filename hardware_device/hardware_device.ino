@@ -1,13 +1,13 @@
 // ============================================================
-// TrekSafe Telemetry Node - Non-Blocking Rock-Solid Firmware
+// TrekSafe Telemetry Node - Guaranteed OLED & Sensor Firmware
 // ESP8266 NodeMCU + SSD1306 OLED + MPU6050 IMU + GPS + Buzzer
 //
 // Hardware Pin Connections:
-//   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
+//   OLED Display:    SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> Vin or 3V3, GND -> GND
 //   MPU6050 IMU:     SDA -> D2 (GPIO 4), SCL -> D1 (GPIO 5), VCC -> 3V3, GND -> GND
 //   GPS Module:      TX -> D5 (GPIO 14 - ESP RX), RX -> D6 (GPIO 12 - ESP TX), VCC -> Vin (5V), GND -> GND
 //   3-Pin Buzzer:    S (Signal) -> D0 (GPIO 16), + (VCC) -> 3V3, - (GND) -> GND
-//   On-board LED:    D4 (GPIO 2 - Blinks every second on JSON packet send)
+//   On-board LED:    D4 (GPIO 2 - Blinks on live packet send)
 // ============================================================
 
 #include <Wire.h>
@@ -28,7 +28,6 @@ SoftwareSerial gpsSerial(D5, D6); // D5=RX (from GPS TX), D6=TX (to GPS RX)
 #define ONBOARD_LED LED_BUILTIN // NodeMCU Blue LED (GPIO 2 / D4)
 #define BUZZER_PIN D0           // 3-Pin Buzzer Signal Pin (GPIO 16)
 
-bool oledOK = false;
 bool mpuOK = false;
 bool gpsFix = false;
 unsigned long lastGpsSentenceTime = 0;
@@ -173,7 +172,7 @@ void setup() {
   digitalWrite(BUZZER_PIN, LOW);
 
   Serial.begin(115200);
-  delay(200);
+  delay(100);
 
   Serial.println();
   Serial.println("=================================================");
@@ -186,44 +185,26 @@ void setup() {
   pinMode(D5, INPUT_PULLUP);
   gpsSerial.begin(9600);
 
-  // Safe I2C Initialization with Clock Stretch Limit (Prevents hanging)
-  Wire.begin(D2, D1);
-  Wire.setClock(100000);
-  #if defined(ESP8266)
-  Wire.setClockStretchLimit(2000); // 2ms timeout prevents hanging if no I2C device
-  #endif
-  delay(50);
+  // Initialize I2C Bus on GPIO 4 (D2) and GPIO 5 (D1)
+  Wire.begin(4, 5);
+  Wire.setClock(400000); // 400kHz Fast I2C
+  delay(100);
 
-  // Probe OLED Display
-  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    oledOK = true;
-    display.clearDisplay();
-    display.dim(false);
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(15, 8);
-    display.print("TrekSafe");
-    display.setTextSize(1);
-    display.setCursor(12, 34);
-    display.print("NodeMCU Mission");
-    display.setCursor(12, 48);
-    display.print("Live Telemetry");
-    display.display();
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3C");
-  } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
-    oledOK = true;
-    display.clearDisplay();
-    display.dim(false);
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(2);
-    display.setCursor(15, 8);
-    display.print("TrekSafe");
-    display.display();
-    Serial.println("✅ [OLED] SSD1306 Display connected @ 0x3D");
-  } else {
-    oledOK = false;
-    Serial.println("ℹ️ [OLED] Display not detected on D2(SDA)/D1(SCL) - continuing stream");
-  }
+  // Force Initialize OLED on 0x3C (with internal charge pump)
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false, false);
+  display.clearDisplay();
+  display.dim(false);
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(2);
+  display.setCursor(15, 8);
+  display.print("TrekSafe");
+  display.setTextSize(1);
+  display.setCursor(12, 34);
+  display.print("NodeMCU Online");
+  display.setCursor(12, 48);
+  display.print("Live Telemetry");
+  display.display();
+  Serial.println("🖥️ [OLED] SSD1306 Command initialized");
 
   // Probe MPU6050 Accelerometer
   if (mpu.begin(0x68, &Wire)) {
@@ -340,9 +321,9 @@ void loop() {
   }
 
   // ==========================================================
-  // REFRESH OLED DISPLAY (Every 200ms)
+  // REFRESH OLED DISPLAY (Every 250ms - Forced Execution)
   // ==========================================================
-  if (oledOK && (now - lastOLED >= 200)) {
+  if (now - lastOLED >= 250) {
     lastOLED = now;
 
     display.clearDisplay();
